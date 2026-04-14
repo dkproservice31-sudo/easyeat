@@ -1,6 +1,7 @@
 // Client Gemini 2.5 Flash pour génération de recettes (sortie JSON structurée)
 const MODEL = 'gemini-2.5-flash';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const GEMINI_KEY = process.env.EXPO_PUBLIC_GEMINI_KEY || '';
 
 const RECIPE_SCHEMA = {
   type: 'OBJECT',
@@ -17,11 +18,16 @@ const RECIPE_SCHEMA = {
   required: ['title', 'ingredients', 'steps'],
 };
 
-async function callGemini(prompt) {
-  const key = process.env.EXPO_PUBLIC_GEMINI_KEY;
-  if (!key) throw new Error('EXPO_PUBLIC_GEMINI_KEY manquante dans .env');
+export const isAIConfigured = () => !!GEMINI_KEY;
 
-  const res = await fetch(`${ENDPOINT}?key=${key}`, {
+async function callGemini(prompt) {
+  if (!GEMINI_KEY) {
+    throw new Error(
+      "La génération IA n'est pas disponible pour le moment. Réessayez plus tard."
+    );
+  }
+
+  const res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
