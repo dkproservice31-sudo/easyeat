@@ -33,17 +33,24 @@ function MetaBadge({ label }) {
 function RecipeCard({ recipe, onPress }) {
   const meta = [];
   if (recipe.duration) meta.push(`${recipe.duration} min`);
-  if (recipe.servings)
-    meta.push(`${recipe.servings} pers.`);
+  if (recipe.servings) meta.push(`${recipe.servings} pers.`);
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <Text style={styles.title} numberOfLines={2}>
-        {recipe.title}
-      </Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title} numberOfLines={2}>
+          {recipe.title}
+        </Text>
+        {recipe.generated_by_ai && (
+          <View style={styles.aiBadge}>
+            <Text style={styles.aiBadgeText}>IA</Text>
+          </View>
+        )}
+      </View>
+
       {recipe.description ? (
         <Text style={styles.desc} numberOfLines={2}>
           {recipe.description}
@@ -75,6 +82,7 @@ export default function RecipesScreen({ navigation }) {
     const { data, error } = await supabase
       .from('recipes')
       .select('*')
+      .or('featured.is.null,featured.eq.false')
       .order('created_at', { ascending: false });
     if (error) setError(error.message);
     else setRecipes(data ?? []);
@@ -200,25 +208,53 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: maxContentWidth,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     padding: spacing.md,
     marginBottom: spacing.md,
+    // Ombre douce
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  cardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
+  cardPressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  title: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  aiBadge: {
+    backgroundColor: colors.primaryDark,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  aiBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   desc: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: '#6B6B6B',
     marginTop: spacing.xs,
     lineHeight: 20,
   },
   meta: {
     fontSize: 13,
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: spacing.sm,
   },
   badges: {
@@ -229,11 +265,17 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: '#FFF1E8',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
-  badgeText: { fontSize: 12, color: colors.primaryDark, fontWeight: '600' },
+  badgeText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '700',
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   empty: {
     alignItems: 'center',

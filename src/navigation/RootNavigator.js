@@ -22,6 +22,7 @@ import RecipeDetailScreen from '../screens/RecipeDetailScreen';
 import EditRecipeScreen from '../screens/EditRecipeScreen';
 import FridgeScreen from '../screens/FridgeScreen';
 import ShoppingScreen from '../screens/ShoppingScreen';
+import AIScreen from '../screens/AIScreen';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors, radius, spacing } from '../theme/theme';
@@ -95,6 +96,7 @@ function MainTabs() {
       <Tabs.Screen name="Recettes" component={RecipesScreen} />
       <Tabs.Screen name="Frigo" component={FridgeScreen} />
       <Tabs.Screen name="Courses" component={ShoppingScreen} />
+      <Tabs.Screen name="IA" component={AIScreen} />
       <Tabs.Screen name="Profil" component={ProfileScreen} />
     </Tabs.Navigator>
   );

@@ -96,11 +96,13 @@ create index if not exists recipes_created_at_idx on public.recipes(created_at d
 
 alter table public.recipes enable row level security;
 
--- Lecture publique (toutes les recettes sont visibles)
+-- Lecture : un utilisateur voit ses propres recettes OU les recettes featured
+-- (catalogue commun français/italien/espagnol).
 drop policy if exists "recipes are viewable by everyone" on public.recipes;
-create policy "recipes are viewable by everyone"
+drop policy if exists "users can view own or featured recipes" on public.recipes;
+create policy "users can view own or featured recipes"
   on public.recipes for select
-  using (true);
+  using (auth.uid() = user_id or featured = true);
 
 -- Un utilisateur ne peut créer une recette qu'en son propre nom
 drop policy if exists "users can insert own recipes" on public.recipes;
@@ -124,6 +126,11 @@ create policy "users can delete own recipes"
 alter table public.recipes add column if not exists fat_type text;
 alter table public.recipes add column if not exists cooking_type text;
 alter table public.recipes add column if not exists cooking_temp integer;
+alter table public.recipes add column if not exists generated_by_ai boolean default false;
+alter table public.recipes add column if not exists featured boolean default false;
+create index if not exists recipes_featured_idx on public.recipes(featured) where featured = true;
+alter table public.recipes add column if not exists cuisine text;
+create index if not exists recipes_cuisine_idx on public.recipes(cuisine) where cuisine is not null;
 
 drop trigger if exists recipes_set_updated_at on public.recipes;
 create trigger recipes_set_updated_at

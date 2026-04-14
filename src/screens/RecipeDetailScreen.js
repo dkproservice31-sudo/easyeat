@@ -1,9 +1,25 @@
 import React, { useLayoutEffect, useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Pressable, Alert, Platform } from 'react-native';
+import {
+  Text,
+  View,
+  StyleSheet,
+  Pressable,
+  Alert,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import Screen from '../components/Screen';
+import Button from '../components/Button';
+import ChipGroup from '../components/ChipGroup';
+import RecipePreview from '../components/RecipePreview';
+import StepsList from '../components/StepsList';
+import IngredientsList from '../components/IngredientsList';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { adjustRecipeServings } from '../lib/ai';
 import { colors, radius, spacing, typography } from '../theme/theme';
+
+const SERVINGS = ['1', '2', '3', '4', '5', '6'];
 
 function confirmDialog(title, message) {
   if (Platform.OS === 'web') {
@@ -81,6 +97,13 @@ export default function RecipeDetailScreen({ route, navigation }) {
   const [recipe, setRecipe] = useState(route.params?.recipe ?? null);
   const [deleting, setDeleting] = useState(false);
 
+  // Adapter les portions
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [newServings, setNewServings] = useState('');
+  const [adjusting, setAdjusting] = useState(false);
+  const [adjusted, setAdjusted] = useState(null);
+  const [savingAdj, setSavingAdj] = useState(false);
+
   const isOwner = !!user && recipe?.user_id === user.id;
 
   // Met à jour la recette locale si on revient depuis Edit avec une version modifiée
@@ -107,6 +130,66 @@ export default function RecipeDetailScreen({ route, navigation }) {
 
   const onEdit = () => {
     navigation.navigate('EditRecipe', { recipe });
+  };
+
+  const runAdjust = async (s) => {
+    setAdjusting(true);
+    setAdjusted(null);
+    try {
+      const result = await adjustRecipeServings({
+        recipe,
+        newServings: parseInt(s, 10),
+      });
+      setAdjusted(result);
+    } catch (err) {
+      notify('Adaptation impossible', err.message || 'Erreur');
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  const saveAsNewRecipe = async () => {
+    if (!adjusted || !user) return;
+    setSavingAdj(true);
+    const { error } = await supabase.from('recipes').insert({
+      user_id: user.id,
+      title: `${adjusted.title} (${newServings} pers.)`,
+      description: adjusted.description || null,
+      ingredients: adjusted.ingredients || null,
+      steps: adjusted.steps || null,
+      servings: parseInt(newServings, 10),
+      duration: adjusted.duration || null,
+      cooking_temp: adjusted.cooking_temp || null,
+      cooking_type: adjusted.cooking_type || null,
+      fat_type: adjusted.fat_type || null,
+      generated_by_ai: true,
+    });
+    setSavingAdj(false);
+    if (error) return notify('Enregistrement impossible', error.message);
+    notify('Enregistrée !', 'Nouvelle recette créée.');
+    setAdjusted(null);
+    setAdjustOpen(false);
+  };
+
+  const replaceCurrent = async () => {
+    if (!adjusted || !recipe) return;
+    setSavingAdj(true);
+    const updates = {
+      ingredients: adjusted.ingredients || null,
+      servings: parseInt(newServings, 10),
+    };
+    const { data, error } = await supabase
+      .from('recipes')
+      .update(updates)
+      .eq('id', recipe.id)
+      .select('*')
+      .single();
+    setSavingAdj(false);
+    if (error) return notify('Modification impossible', error.message);
+    setRecipe(data);
+    setAdjusted(null);
+    setAdjustOpen(false);
+    notify('Mise à jour', 'Quantités mises à jour.');
   };
 
   useLayoutEffect(() => {
@@ -160,15 +243,93 @@ export default function RecipeDetailScreen({ route, navigation }) {
 
       {recipe.ingredients ? (
         <Section title="Ingrédients">
-          <Text style={styles.body}>{recipe.ingredients}</Text>
+          <IngredientsList ingredients={recipe.ingredients} />
         </Section>
       ) : null}
 
       {recipe.steps ? (
         <Section title="Étapes">
-          <Text style={styles.body}>{recipe.steps}</Text>
+          <StepsList steps={recipe.steps} />
         </Section>
       ) : null}
+
+      <View style={{ marginTop: spacing.xl }}>
+        {!adjustOpen ? (
+          <Button
+            title="Adapter les portions"
+            onPress={() => {
+              setAdjustOpen(true);
+              setNewServings(
+                recipe.servings ? String(recipe.servings) : '2'
+              );
+            }}
+          />
+        ) : (
+          <View style={styles.adjustBox}>
+            <Text style={styles.adjustTitle}>Adapter pour combien ?</Text>
+            <ChipGroup
+              options={SERVINGS}
+              value={newServings}
+              onChange={(v) => v && setNewServings(v)}
+              disabled={adjusting || savingAdj}
+            />
+            <Button
+              title={adjusting ? 'Recalcul...' : 'Recalculer avec l\'IA'}
+              onPress={() => runAdjust(newServings)}
+              loading={adjusting}
+              disabled={savingAdj}
+            />
+            <View style={{ height: spacing.sm }} />
+            <Button
+              title="Annuler"
+              variant="ghost"
+              onPress={() => {
+                setAdjustOpen(false);
+                setAdjusted(null);
+              }}
+              disabled={adjusting || savingAdj}
+            />
+
+            {adjusting && (
+              <View style={{ alignItems: 'center', marginTop: spacing.md }}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            )}
+
+            {adjusted && (
+              <>
+                <RecipePreview
+                  recipe={{ ...adjusted, servings: newServings }}
+                />
+                <View style={{ marginTop: spacing.md }}>
+                  <Button
+                    title="Sauvegarder comme nouvelle recette"
+                    onPress={saveAsNewRecipe}
+                    loading={savingAdj}
+                  />
+                  <View style={{ height: spacing.sm }} />
+                  <Button
+                    title="Remplacer la recette actuelle"
+                    variant="ghost"
+                    onPress={replaceCurrent}
+                    disabled={savingAdj || !isOwner}
+                  />
+                  {!isOwner && (
+                    <Text
+                      style={[
+                        typography.small,
+                        { textAlign: 'center', marginTop: spacing.xs },
+                      ]}
+                    >
+                      Seul le propriétaire peut remplacer la recette.
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+      </View>
     </Screen>
   );
 }
@@ -236,5 +397,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  adjustBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  adjustTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
 });
