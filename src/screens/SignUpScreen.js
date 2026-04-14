@@ -1,43 +1,106 @@
 import React, { useState } from 'react';
-import { Text, View, Alert } from 'react-native';
+import { Text, View, Alert, Platform } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../contexts/AuthContext';
-import { spacing, typography } from '../theme/theme';
+import { spacing, typography, colors } from '../theme/theme';
+
+function notify(title, message) {
+  if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
+  else Alert.alert(title, message);
+}
 
 export default function SignUpScreen({ navigation }) {
   const { signUp } = useAuth();
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const validate = () => {
+    const e = {};
+    if (!username.trim()) e.username = "Nom d'utilisateur requis";
+    else if (username.trim().length < 3) e.username = 'Au moins 3 caractères';
+    if (!email.trim()) e.email = 'Email requis';
+    else if (!/^\S+@\S+\.\S+$/.test(email.trim())) e.email = 'Email invalide';
+    if (!password) e.password = 'Mot de passe requis';
+    else if (password.length < 6) e.password = 'Au moins 6 caractères';
+    if (confirm !== password) e.confirm = 'Les mots de passe ne correspondent pas';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const onSubmit = async () => {
+    if (!validate()) return;
     setLoading(true);
-    const { error } = await signUp(email, password);
+    const { data, error } = await signUp(email, password, username);
     setLoading(false);
-    if (error) return Alert.alert('Erreur', error.message);
-    Alert.alert('Bienvenue', 'Vérifiez votre email pour confirmer votre compte.');
+    if (error) return notify('Inscription impossible', error.message);
+
+    // Si confirmation email activée: pas de session immédiate
+    if (!data?.session) {
+      notify(
+        'Vérifiez votre email',
+        'Un lien de confirmation vous a été envoyé. Confirmez votre compte puis connectez-vous.'
+      );
+      navigation.navigate('SignIn');
+    }
+    // Sinon, AuthContext bascule automatiquement vers l'app
   };
 
   return (
     <Screen>
-      <Text style={typography.h1}>Créer un compte</Text>
-      <Text style={[typography.small, { marginBottom: spacing.xl }]}>Rejoignez EasyEat</Text>
+      <Text style={[typography.h1, { color: colors.primary }]}>Créer un compte</Text>
+      <Text style={[typography.small, { marginBottom: spacing.xl }]}>
+        Rejoignez la communauté EasyEat
+      </Text>
+      <Input
+        label="Nom d'utilisateur"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="chefmarie"
+        error={errors.username}
+        editable={!loading}
+      />
       <Input
         label="Email"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
         placeholder="vous@exemple.com"
+        error={errors.email}
+        editable={!loading}
       />
       <Input
         label="Mot de passe"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoComplete="password-new"
+        textContentType="newPassword"
         placeholder="Au moins 6 caractères"
+        error={errors.password}
+        editable={!loading}
+      />
+      <Input
+        label="Confirmer le mot de passe"
+        value={confirm}
+        onChangeText={setConfirm}
+        secureTextEntry
+        autoComplete="password-new"
+        placeholder="••••••••"
+        error={errors.confirm}
+        editable={!loading}
+        onSubmitEditing={onSubmit}
       />
       <Button title="S'inscrire" onPress={onSubmit} loading={loading} />
       <View style={{ height: spacing.md }} />
@@ -45,6 +108,7 @@ export default function SignUpScreen({ navigation }) {
         title="Retour"
         variant="ghost"
         onPress={() => navigation.goBack()}
+        disabled={loading}
       />
     </Screen>
   );
