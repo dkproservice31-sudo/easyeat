@@ -80,9 +80,13 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: spacing.sm,
+    width: '100%',
   },
   chip: {
+    flexShrink: 1,
+    maxWidth: '100%',
     backgroundColor: '#FFF1E8',
     borderColor: colors.primary,
     borderWidth: 1.5,

@@ -4,7 +4,7 @@ import {
   View,
   Pressable,
   StyleSheet,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   RefreshControl,
   Alert,
@@ -16,6 +16,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { formatDateTimeFr } from '../lib/dateFr';
+import {
+  parseIngredients,
+  cleanIngredientName,
+  findInFridge,
+} from '../lib/ingredients';
 import {
   colors,
   radius,
@@ -41,7 +46,7 @@ function confirmDialog(title, message) {
   });
 }
 
-function ShoppingRow({ item, checked, onToggle }) {
+function ShoppingItemRow({ item, checked, onToggle }) {
   return (
     <Pressable
       onPress={() => onToggle(item.id)}
@@ -59,10 +64,76 @@ function ShoppingRow({ item, checked, onToggle }) {
       >
         {item.name}
       </Text>
-      <Text style={[styles.qty, checked && styles.nameChecked]}>
-        {item.quantity > 0 ? `${item.quantity} ${item.unit}` : item.unit}
+      <Text style={[styles.qtyText, checked && styles.nameChecked]}>
+        {item.unit}
       </Text>
     </Pressable>
+  );
+}
+
+// Carte d'une recette avec statut de chaque ingrédient vis-à-vis du frigo
+function RecipeCard({ recipe, fridge, onAddAll, adding }) {
+  const lines = parseIngredients(recipe.ingredients);
+  const items = lines.map((raw) => {
+    const clean = cleanIngredientName(raw) || raw;
+    const match = findInFridge(clean, fridge);
+    const inStock = match && Number(match.quantity) > 0;
+    return { raw, clean, inStock };
+  });
+  const missing = items.filter((i) => !i.inStock);
+
+  return (
+    <View style={styles.recipeCard}>
+      <Text style={styles.recipeTitle} numberOfLines={2}>
+        {recipe.title}
+      </Text>
+
+      {items.length === 0 ? (
+        <Text style={[typography.small, { marginTop: spacing.sm }]}>
+          Aucun ingrédient listé.
+        </Text>
+      ) : (
+        <View style={styles.ingWrap}>
+          {items.map((it, i) => (
+            <View
+              key={i}
+              style={[
+                styles.ingChip,
+                it.inStock ? styles.ingInStock : styles.ingMissing,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.ingText,
+                  it.inStock
+                    ? { color: '#0A6E50' }
+                    : { color: '#9A1B2A' },
+                ]}
+                numberOfLines={1}
+              >
+                {it.raw}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {missing.length > 0 && (
+        <Pressable
+          onPress={() => onAddAll(recipe, missing)}
+          disabled={adding}
+          style={({ pressed }) => [
+            styles.addAllBtn,
+            pressed && { opacity: 0.85 },
+            adding && { opacity: 0.5 },
+          ]}
+        >
+          <Text style={styles.addAllText}>
+            {adding ? '...' : `Tout ajouter au caddie (${missing.length})`}
+          </Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
 
@@ -75,7 +146,10 @@ function FinishModal({ visible, onClose, onOk, onSave, busy }) {
       onRequestClose={onClose}
     >
       <View style={styles.modalBackdrop}>
-        <Pressable style={styles.modalBackdropTap} onPress={busy ? undefined : onClose} />
+        <Pressable
+          style={styles.modalBackdropTap}
+          onPress={busy ? undefined : onClose}
+        />
         <View style={styles.modalCard}>
           <Text style={typography.h2}>Terminer les courses</Text>
           <Text style={[typography.small, { marginTop: spacing.sm }]}>
@@ -167,44 +241,55 @@ function HistoryCard({ entry, onDelete }) {
 
 export default function ShoppingScreen() {
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [checked, setChecked] = useState(new Set());
+  const [fridge, setFridge] = useState([]);
+  const [recipes, setRecipes] = useState([]);
   const [history, setHistory] = useState([]);
+  const [checked, setChecked] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [addingRecipeId, setAddingRecipeId] = useState(null);
 
-  const loadItems = useCallback(async () => {
+  const loadFridge = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('fridge_items')
       .select('*')
+      .eq('user_id', user.id);
+    setFridge(data ?? []);
+  }, [user]);
+
+  const loadRecipes = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('recipes')
+      .select('id, title, ingredients')
       .eq('user_id', user.id)
-      .eq('quantity', 0)
+      .or('featured.is.null,featured.eq.false')
       .order('created_at', { ascending: false });
-    if (!error) setItems(data ?? []);
+    setRecipes(data ?? []);
   }, [user]);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('shopping_history')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20);
-    if (!error) setHistory(data ?? []);
+    setHistory(data ?? []);
   }, [user]);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         setLoading(true);
-        await Promise.all([loadItems(), loadHistory()]);
+        await Promise.all([loadFridge(), loadRecipes(), loadHistory()]);
         setLoading(false);
       })();
-    }, [loadItems, loadHistory])
+    }, [loadFridge, loadRecipes, loadHistory])
   );
 
   useEffect(() => {
@@ -219,13 +304,15 @@ export default function ShoppingScreen() {
           table: 'fridge_items',
           filter: `user_id=eq.${user.id}`,
         },
-        () => loadItems()
+        () => loadFridge()
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, loadItems]);
+  }, [user, loadFridge]);
+
+  const shoppingList = fridge.filter((f) => Number(f.quantity) === 0);
 
   const toggle = (id) => {
     setChecked((prev) => {
@@ -238,13 +325,12 @@ export default function ShoppingScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadItems(), loadHistory()]);
+    await Promise.all([loadFridge(), loadRecipes(), loadHistory()]);
     setRefreshing(false);
   };
 
-  // Ramène quantity=1 pour tous les items cochés
   const completePurchase = async (saveToHistory) => {
-    const checkedItems = items.filter((i) => checked.has(i.id));
+    const checkedItems = shoppingList.filter((i) => checked.has(i.id));
     if (checkedItems.length === 0) {
       setModalOpen(false);
       return;
@@ -278,7 +364,49 @@ export default function ShoppingScreen() {
 
     setChecked(new Set());
     setModalOpen(false);
-    await Promise.all([loadItems(), loadHistory()]);
+    await Promise.all([loadFridge(), loadHistory()]);
+  };
+
+  // Ajoute au frigo avec quantity=0 tous les ingrédients manquants d'une recette
+  const addAllFromRecipe = async (recipe, missingItems) => {
+    if (!user || missingItems.length === 0) return;
+    setAddingRecipeId(recipe.id);
+
+    // Dédupe par nom nettoyé pour éviter les doublons dans le batch
+    const seen = new Set();
+    const toInsert = [];
+    for (const m of missingItems) {
+      const name = m.clean || m.raw;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Ne pas réinsérer si une ligne avec qty=0 existe déjà (match partiel)
+      const existing = findInFridge(name, fridge);
+      if (existing && Number(existing.quantity) === 0) continue;
+      // S'il existe avec qty > 0 on n'insère pas non plus (sinon doublon)
+      if (existing && Number(existing.quantity) > 0) continue;
+      toInsert.push({
+        user_id: user.id,
+        name,
+        quantity: 0,
+        unit: 'unité',
+      });
+    }
+
+    if (toInsert.length === 0) {
+      setAddingRecipeId(null);
+      notify('Déjà au complet', 'Ces ingrédients sont déjà dans votre caddie.');
+      return;
+    }
+
+    const { error } = await supabase.from('fridge_items').insert(toInsert);
+    setAddingRecipeId(null);
+    if (error) return notify('Ajout impossible', error.message);
+    await loadFridge();
+    notify(
+      'Ajoutés au caddie',
+      `${toInsert.length} ingrédient${toInsert.length > 1 ? 's ajoutés' : ' ajouté'}.`
+    );
   };
 
   const deleteHistory = async (entry) => {
@@ -307,11 +435,6 @@ export default function ShoppingScreen() {
         <View style={styles.headerInner}>
           <Text style={typography.h1}>Mes Courses</Text>
         </View>
-        <Text
-          style={[typography.small, { marginTop: spacing.xs, textAlign: 'center' }]}
-        >
-          {items.length} à acheter · {checked.size} dans le caddie
-        </Text>
       </View>
 
       {loading ? (
@@ -319,17 +442,9 @@ export default function ShoppingScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(it) => it.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <ShoppingRow
-              item={item}
-              checked={checked.has(item.id)}
-              onToggle={toggle}
-            />
-          )}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -337,37 +452,100 @@ export default function ShoppingScreen() {
               tintColor={colors.primary}
             />
           }
-          ListEmptyComponent={
+        >
+          {/* Section 1 : ingrédients à acheter */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>
+              Mes ingrédients
+            </Text>
+            {shoppingList.length > 0 &&
+              (() => {
+                const allChecked =
+                  shoppingList.length > 0 &&
+                  shoppingList.every((i) => checked.has(i.id));
+                return (
+                  <Pressable
+                    onPress={() => {
+                      if (allChecked) {
+                        setChecked(new Set());
+                      } else {
+                        setChecked(new Set(shoppingList.map((i) => i.id)));
+                      }
+                    }}
+                    style={({ pressed }) => [
+                      styles.toggleAllBtn,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                    accessibilityLabel={
+                      allChecked ? 'Tout désélectionner' : 'Tout sélectionner'
+                    }
+                  >
+                    <Text style={styles.toggleAllText}>
+                      {allChecked ? 'Tout désélectionner' : 'Tout sélectionner'}
+                    </Text>
+                  </Pressable>
+                );
+              })()}
+          </View>
+          <Text style={styles.sectionHint}>
+            {shoppingList.length} à acheter · {checked.size} dans le caddie
+          </Text>
+          {shoppingList.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={typography.h3}>Aucune course à faire</Text>
-              <Text
-                style={[
-                  typography.small,
-                  { marginTop: spacing.sm, textAlign: 'center' },
-                ]}
-              >
-                Les ingrédients à quantité 0 apparaîtront ici.
+              <Text style={typography.small}>
+                Aucune course à faire pour le moment.
               </Text>
             </View>
-          }
-          ListFooterComponent={
-            history.length > 0 ? (
-              <View style={styles.historyWrap}>
-                <Text style={styles.historyTitle}>Historique des courses</Text>
-                {history.map((h) => (
-                  <HistoryCard
-                    key={h.id}
-                    entry={h}
-                    onDelete={deleteHistory}
-                  />
-                ))}
-              </View>
-            ) : null
-          }
-        />
+          ) : (
+            <View style={{ gap: spacing.sm }}>
+              {shoppingList.map((item) => (
+                <ShoppingItemRow
+                  key={item.id}
+                  item={item}
+                  checked={checked.has(item.id)}
+                  onToggle={toggle}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Section 2 : recettes et leurs ingrédients */}
+          <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+            Mes recettes
+          </Text>
+          {recipes.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={typography.small}>
+                Vous n'avez pas encore de recettes.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: spacing.md }}>
+              {recipes.map((r) => (
+                <RecipeCard
+                  key={r.id}
+                  recipe={r}
+                  fridge={fridge}
+                  onAddAll={addAllFromRecipe}
+                  adding={addingRecipeId === r.id}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Historique */}
+          {history.length > 0 && (
+            <View style={styles.historyWrap}>
+              <Text style={styles.historyTitle}>Historique des courses</Text>
+              {history.map((h) => (
+                <HistoryCard key={h.id} entry={h} onDelete={deleteHistory} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
       )}
 
-      {items.length > 0 && (
+      {shoppingList.length > 0 && (
         <View style={styles.footer}>
           <Pressable
             onPress={() => setModalOpen(true)}
@@ -413,12 +591,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  listContent: {
+  scroll: { flex: 1 },
+  scrollContent: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: 120,
     alignItems: 'center',
   },
+  sectionTitle: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  sectionHeaderRow: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  toggleAllBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: '#FFF1E8',
+  },
+  toggleAllText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionHint: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  empty: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    padding: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
   row: {
     width: '100%',
     maxWidth: maxContentWidth,
@@ -429,7 +655,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    marginBottom: spacing.sm,
     gap: spacing.md,
     minHeight: 56,
   },
@@ -464,23 +689,68 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: colors.textMuted,
   },
-  qty: {
-    fontSize: 13,
-    color: colors.textMuted,
-    fontWeight: '600',
+  qtyText: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
+
+  // Carte recette
+  recipeCard: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    padding: spacing.md,
   },
+  recipeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  ingWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    width: '100%',
+  },
+  ingChip: {
+    flexShrink: 1,
+    maxWidth: '100%',
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  ingInStock: {
+    backgroundColor: '#E6F7EE',
+    borderColor: '#0A6E50',
+  },
+  ingMissing: {
+    backgroundColor: '#FDECEE',
+    borderColor: '#9A1B2A',
+  },
+  ingText: { fontSize: 12, fontWeight: '600' },
+  addAllBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+  },
+  addAllText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
   },
-  empty: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxl,
-    maxWidth: maxContentWidth,
-  },
 
+  // Footer fixe
   footer: {
     position: 'absolute',
     left: 0,
@@ -526,9 +796,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  modalBtnCancel: {
-    backgroundColor: '#E0E0E0',
-  },
+  modalBtnCancel: { backgroundColor: '#E0E0E0' },
   modalBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   // Historique
@@ -556,6 +824,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
+  historyDate: { fontSize: 15, fontWeight: '700', color: colors.text },
+  historyCount: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  historyItems: { marginTop: spacing.sm },
+  historyItem: {
+    fontSize: 14,
+    color: colors.textMuted,
+    lineHeight: 20,
+  },
   historyDeleteBtn: {
     width: 36,
     height: 36,
@@ -564,27 +845,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  historyDeleteText: {
-    fontSize: 16,
-    color: colors.error,
-  },
-  historyDate: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  historyCount: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  historyItems: {
-    marginTop: spacing.sm,
-  },
-  historyItem: {
-    fontSize: 14,
-    color: colors.textMuted,
-    lineHeight: 20,
-  },
+  historyDeleteText: { fontSize: 16, color: colors.error },
 });

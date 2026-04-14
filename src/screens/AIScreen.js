@@ -10,14 +10,12 @@ import {
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
-import ChipGroup from '../components/ChipGroup';
+import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { generateRecipe } from '../lib/ai';
 import { colors, radius, spacing, touch, typography } from '../theme/theme';
-
-const SERVINGS = ['1', '2', '3', '4', '5', '6'];
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -98,6 +96,7 @@ export default function AIScreen() {
       fat_type: recipe.fat_type || null,
       generated_by_ai: true,
     });
+
     setSaving(false);
     if (error) return notify('Enregistrement impossible', error.message);
     notify('Enregistrée !', 'Recette ajoutée à vos recettes.');
@@ -113,10 +112,9 @@ export default function AIScreen() {
       </Text>
 
       <Text style={styles.label}>Nombre de personnes</Text>
-      <ChipGroup
-        options={SERVINGS}
+      <ServingsSelector
         value={servings}
-        onChange={(v) => v && setServings(v)}
+        onChange={setServings}
         disabled={generating}
       />
 

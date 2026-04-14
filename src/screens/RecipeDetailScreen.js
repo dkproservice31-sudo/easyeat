@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import Screen from '../components/Screen';
 import Button from '../components/Button';
-import ChipGroup from '../components/ChipGroup';
+import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
 import StepsList from '../components/StepsList';
 import IngredientsList from '../components/IngredientsList';
@@ -19,7 +19,25 @@ import { supabase } from '../lib/supabase';
 import { adjustRecipeServings } from '../lib/ai';
 import { colors, radius, spacing, typography } from '../theme/theme';
 
-const SERVINGS = ['1', '2', '3', '4', '5', '6'];
+// Retire les mentions de portions d'un titre :
+//   "(pour 2 personnes)", "(2 pers.)", "(pour 4 pers.)", "pour 2 personnes",
+//   "2 personnes", "2 pers.", "(2 personnes)", etc.
+function stripServings(title) {
+  if (!title) return title;
+  let t = title;
+  // Entre parenthèses (avec ou sans "pour")
+  t = t.replace(
+    /\s*\(\s*(?:pour\s+)?\d+\s*(?:personnes?|pers\.?)\s*\)/gi,
+    ''
+  );
+  // Sans parenthèses, avec "pour"
+  t = t.replace(/\s+pour\s+\d+\s+(?:personnes?|pers\.?)/gi, '');
+  // Sans parenthèses, sans "pour" (ex : "Tarte 4 personnes")
+  t = t.replace(/\s+\d+\s+(?:personnes?|pers\.?)\b/gi, '');
+  // Nettoie les parenthèses vides résiduelles
+  t = t.replace(/\(\s*\)/g, '');
+  return t.replace(/\s{2,}/g, ' ').trim();
+}
 
 function confirmDialog(title, message) {
   if (Platform.OS === 'web') {
@@ -151,13 +169,15 @@ export default function RecipeDetailScreen({ route, navigation }) {
   const saveAsNewRecipe = async () => {
     if (!adjusted || !user) return;
     setSavingAdj(true);
+    const cleanTitle = stripServings(adjusted.title || recipe.title);
+    const n = parseInt(newServings, 10);
     const { error } = await supabase.from('recipes').insert({
       user_id: user.id,
-      title: `${adjusted.title} (${newServings} pers.)`,
+      title: `${cleanTitle} (${n} pers.)`,
       description: adjusted.description || null,
       ingredients: adjusted.ingredients || null,
       steps: adjusted.steps || null,
-      servings: parseInt(newServings, 10),
+      servings: n,
       duration: adjusted.duration || null,
       cooking_temp: adjusted.cooking_temp || null,
       cooking_type: adjusted.cooking_type || null,
@@ -267,10 +287,9 @@ export default function RecipeDetailScreen({ route, navigation }) {
         ) : (
           <View style={styles.adjustBox}>
             <Text style={styles.adjustTitle}>Adapter pour combien ?</Text>
-            <ChipGroup
-              options={SERVINGS}
+            <ServingsSelector
               value={newServings}
-              onChange={(v) => v && setNewServings(v)}
+              onChange={setNewServings}
               disabled={adjusting || savingAdj}
             />
             <Button
@@ -299,7 +318,11 @@ export default function RecipeDetailScreen({ route, navigation }) {
             {adjusted && (
               <>
                 <RecipePreview
-                  recipe={{ ...adjusted, servings: newServings }}
+                  recipe={{
+                    ...adjusted,
+                    title: `${stripServings(adjusted.title || recipe.title)} (${newServings} pers.)`,
+                    servings: parseInt(newServings, 10),
+                  }}
                 />
                 <View style={{ marginTop: spacing.md }}>
                   <Button
