@@ -127,7 +127,7 @@ export default function HomeScreen() {
   const [addedTitles, setAddedTitles] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(null);
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
@@ -161,19 +161,6 @@ export default function HomeScreen() {
     }, [load])
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return featured.filter((r) => {
-      if (
-        filter !== 'all' &&
-        (r.cuisine || '').trim().toLowerCase() !== filter
-      )
-        return false;
-      if (q && !(r.title || '').toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [featured, filter, query]);
-
   // Compteurs + chips 100% dynamiques à partir des recettes featured publiées
   const filtersWithCount = useMemo(() => {
     const counts = {};
@@ -187,14 +174,29 @@ export default function HomeScreen() {
       const diff = counts[b] - counts[a];
       return diff !== 0 ? diff : a.localeCompare(b);
     });
-    return [
-      { key: 'all', label: `Tout (${featured.length})` },
-      ...cuisineKeys.map((k) => ({
-        key: k,
-        label: `${capitalize(k)} (${counts[k]})`,
-      })),
-    ];
+    return cuisineKeys.map((k) => ({
+      key: k,
+      label: `${capitalize(k)} (${counts[k]})`,
+    }));
   }, [featured]);
+
+  // Sélectionne le premier pays par défaut (ou si le filtre courant n'existe plus)
+  useEffect(() => {
+    if (filtersWithCount.length === 0) return;
+    if (!filter || !filtersWithCount.some((f) => f.key === filter)) {
+      setFilter(filtersWithCount[0].key);
+    }
+  }, [filtersWithCount, filter]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return featured.filter((r) => {
+      if (!filter) return false;
+      if ((r.cuisine || '').trim().toLowerCase() !== filter) return false;
+      if (q && !(r.title || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [featured, filter, query]);
 
   const quickSuggestions = useMemo(() => {
     return [...filtered]
@@ -359,7 +361,7 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => {
               setQuery('');
-              setFilter('all');
+              if (filtersWithCount.length > 0) setFilter(filtersWithCount[0].key);
             }}
             hitSlop={6}
           >
