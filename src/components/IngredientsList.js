@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { colors, radius, spacing } from '../theme/theme';
+import { colors, spacing } from '../theme/theme';
 
-// Split sur sauts de ligne ET virgules, retire puces/tirets en début
 function parseIngredients(raw) {
   if (!raw) return [];
   return raw
@@ -14,7 +13,6 @@ function parseIngredients(raw) {
     .filter(Boolean);
 }
 
-// Cherche si un fridge_item match l'ingrédient (nom contenu, insensible casse)
 function matchFridge(ingredientText, fridgeItems) {
   const lc = ingredientText.toLowerCase();
   for (const it of fridgeItems) {
@@ -87,12 +85,12 @@ const styles = StyleSheet.create({
   chip: {
     flexShrink: 1,
     maxWidth: '100%',
-    backgroundColor: '#FFF1E8',
-    borderColor: colors.primary,
-    borderWidth: 1.5,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: '#FFF8F0',
+    borderColor: '#F0E8E0',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     position: 'relative',
   },
   text: {

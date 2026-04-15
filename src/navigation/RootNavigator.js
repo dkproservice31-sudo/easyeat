@@ -30,15 +30,33 @@ import { colors, radius, spacing } from '../theme/theme';
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
+const TAB_ICONS = {
+  Accueil: '🏠',
+  Recettes: '📖',
+  Frigo: '❄️',
+  Courses: '🛒',
+  IA: '✨',
+  Profil: '👤',
+};
+
+const EMOJI_STYLE =
+  Platform.OS === 'web'
+    ? {
+        fontFamily:
+          '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif',
+      }
+    : null;
+
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, spacing.sm);
+  // Sur web, on combine avec env(safe-area-inset-bottom) via style string
+  const webSafeBottom =
+    Platform.OS === 'web'
+      ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }
+      : { paddingBottom: bottomPad };
   return (
-    <View
-      style={[
-        styles.tabBar,
-        { paddingBottom: Math.max(insets.bottom, spacing.sm) },
-      ]}
-    >
+    <View style={[styles.tabBar, webSafeBottom]}>
       <View style={styles.tabBarInner}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
@@ -56,19 +74,28 @@ function CustomTabBar({ state, descriptors, navigation }) {
             }
           };
 
+          const icon = TAB_ICONS[route.name] ?? '•';
           return (
             <Pressable
               key={route.key}
               onPress={onPress}
               style={({ pressed }) => [
-                styles.pill,
-                isFocused ? styles.pillActive : styles.pillInactive,
+                styles.tab,
                 pressed && styles.pillPressed,
               ]}
               accessibilityRole="button"
               accessibilityState={{ selected: isFocused }}
               accessibilityLabel={label}
             >
+              <Text
+                style={[
+                  styles.icon,
+                  EMOJI_STYLE,
+                  { opacity: isFocused ? 1 : 0.55 },
+                ]}
+              >
+                {icon}
+              </Text>
               <Text
                 style={[
                   styles.label,
@@ -202,25 +229,25 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     gap: spacing.xs,
   },
-  pill: {
+  tab: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: radius.pill,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xs,
+    gap: 2,
   },
-  pillActive: {
-    backgroundColor: colors.primary,
+  pillPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
+  icon: {
+    fontSize: 20,
+    textAlign: 'center',
+    lineHeight: 24,
   },
-  pillInactive: {
-    backgroundColor: colors.background,
-  },
-  pillPressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   label: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
+    textAlign: 'center',
   },
-  labelActive: { color: '#fff' },
-  labelInactive: { color: colors.primary },
+  labelActive: { color: colors.primary },
+  labelInactive: { color: '#AAAAAA' },
 });

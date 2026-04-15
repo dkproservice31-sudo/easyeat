@@ -18,13 +18,18 @@ export default function Input({ label, error, style, ...props }) {
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md, width: '100%' },
-  label: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: spacing.xs,
+  },
   input: {
     minHeight: touch.minHeight,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingHorizontal: spacing.md,
     fontSize: 16,
     color: colors.text,

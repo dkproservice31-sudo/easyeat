@@ -27,17 +27,21 @@ export default function Button({ title, onPress, variant = 'primary', loading, d
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: touch.minHeight,
+    minHeight: 50,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primary: { backgroundColor: colors.primary },
-  ghost: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary },
+  ghost: {
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+  },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.5 },
-  text: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  text: { color: '#fff', fontSize: 16, fontWeight: '700' },
   textGhost: { color: colors.primary },
 });

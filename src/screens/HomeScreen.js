@@ -1,33 +1,30 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Text,
   View,
   StyleSheet,
   ScrollView,
   Pressable,
+  TextInput,
   ActivityIndicator,
   Alert,
   Platform,
-  TextInput,
-  useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import Screen from '../components/Screen';
+import WebScroll from '../components/WebScroll';
+import RecipeEmoji from '../components/RecipeEmoji';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { formatDateFr, formatTimeFr } from '../lib/dateFr';
-import {
-  colors,
-  radius,
-  spacing,
-  typography,
-  maxContentWidth,
-} from '../theme/theme';
+import { formatDateFr } from '../lib/dateFr';
+import { getRecipeEmoji } from '../lib/recipeEmoji';
+import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
 
-const SECTIONS = [
-  { cuisine: 'française', title: '🇫🇷 Recettes françaises' },
-  { cuisine: 'italienne', title: '🇮🇹 Recettes italiennes' },
-  { cuisine: 'espagnole', title: '🇪🇸 Recettes espagnoles' },
+const BASE_FILTERS = [
+  { key: 'all', label: 'Tout' },
+  { key: 'française', label: 'Françaises' },
+  { key: 'italienne', label: 'Italiennes' },
+  { key: 'espagnole', label: 'Espagnoles' },
 ];
 
 function notify(title, message) {
@@ -35,36 +32,50 @@ function notify(title, message) {
   else Alert.alert(title, message);
 }
 
-function FeaturedRow({ recipe, added, adding, onAdd, onPress }) {
-  const meta = [];
-  if (recipe.duration) meta.push(`${recipe.duration} min`);
-  if (recipe.servings) meta.push(`${recipe.servings} pers.`);
+// Fallback emoji fonts pour web (sinon pas de rendu sur Chrome/Windows)
+const EMOJI_STYLE =
+  Platform.OS === 'web'
+    ? {
+        fontFamily:
+          '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif',
+      }
+    : null;
 
+function getInitial(username, email) {
+  const base = (username || email || '?').trim();
+  return base.charAt(0).toUpperCase();
+}
+
+function PopularCard({ recipe, added, adding, onAdd, onOpen }) {
   return (
     <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.popCard,
+        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+      ]}
     >
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {recipe.title}
-        </Text>
-        {meta.length > 0 && (
-          <Text style={styles.rowMeta}>{meta.join('  ·  ')}</Text>
-        )}
-      </View>
+      <RecipeEmoji title={recipe.title} size={40} style={styles.popEmoji} />
+      <Text style={styles.popTitle} numberOfLines={2}>
+        {recipe.title}
+      </Text>
+      <Text style={styles.popMeta} numberOfLines={1}>
+        {recipe.duration ? `${recipe.duration} min` : ''}
+        {recipe.duration && recipe.servings ? ' · ' : ''}
+        {recipe.servings ? `${recipe.servings} pers.` : ''}
+      </Text>
       <Pressable
         onPress={onAdd}
         disabled={added || adding}
         style={({ pressed }) => [
-          styles.addBtn,
-          added && styles.addBtnDone,
+          styles.popAddBtn,
+          added && styles.popAddBtnDone,
           pressed && !added && !adding && { opacity: 0.85 },
           adding && { opacity: 0.6 },
         ]}
       >
         <Text
-          style={[styles.addBtnText, added && { color: colors.textMuted }]}
+          style={[styles.popAddText, added && { color: colors.textMuted }]}
         >
           {added ? 'Ajoutée ✓' : adding ? '...' : 'Ajouter'}
         </Text>
@@ -73,120 +84,42 @@ function FeaturedRow({ recipe, added, adding, onAdd, onPress }) {
   );
 }
 
-function CuisineSection({
-  title,
-  recipes,
-  loading,
-  addedTitles,
-  addingId,
-  onAdd,
-  onOpen,
-  width,
-}) {
-  const [query, setQuery] = useState('');
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? recipes.filter((r) => (r.title || '').toLowerCase().includes(q))
-    : recipes;
-
+function QuickRow({ recipe, onOpen }) {
   return (
-    <View style={[styles.section, { width }]}>
-      <Text style={styles.sectionTitle}>
-        {title} ({recipes.length})
-      </Text>
-      <View style={styles.box}>
-        <View style={styles.searchWrap}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Rechercher..."
-            placeholderTextColor={colors.textMuted}
-            style={styles.searchInput}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-          />
-          {query.length > 0 && (
-            <Pressable
-              onPress={() => setQuery('')}
-              hitSlop={8}
-              style={styles.searchClear}
-            >
-              <Text style={styles.searchClearText}>×</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : filtered.length === 0 ? (
-          <View style={styles.center}>
-            <Text style={typography.small}>
-              {q ? 'Aucun résultat.' : 'Aucune recette disponible.'}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            keyboardShouldPersistTaps="handled"
-          >
-            {filtered.map((item) => (
-              <FeaturedRow
-                key={item.id}
-                recipe={item}
-                added={addedTitles.has(item.title)}
-                adding={addingId === item.id}
-                onAdd={() => onAdd(item)}
-                onPress={() => onOpen(item)}
-              />
-            ))}
-          </ScrollView>
-        )}
+    <Pressable
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.quickRow,
+        pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] },
+      ]}
+    >
+      <RecipeEmoji title={recipe.title} size={32} style={styles.quickEmoji} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.quickTitle} numberOfLines={1}>
+          {recipe.title}
+        </Text>
+        <Text style={styles.quickMeta} numberOfLines={1}>
+          {recipe.duration ? `${recipe.duration} min` : 'Classique'}
+          {recipe.servings ? ` · ${recipe.servings} pers.` : ''}
+        </Text>
       </View>
-    </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
   );
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigation = useNavigation();
-  const { width: screenWidth } = useWindowDimensions();
-  const [now, setNow] = useState(new Date());
-  const [byCuisine, setByCuisine] = useState({});
+  const insets = useSafeAreaInsets();
+
+  const [now] = useState(new Date());
+  const [featured, setFeatured] = useState([]);
   const [addedTitles, setAddedTitles] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
-  const [page, setPage] = useState(0);
-  const [pagerWidth, setPagerWidth] = useState(null);
-  const pagerRef = useRef(null);
-
-  // La largeur réelle du pager est mesurée par onLayout (gère correctement
-  // les paddings imbriqués de Screen sur web et le max-width).
-  // Fallback avant la première mesure : estimation conservative.
-  const fallback = Math.min(
-    screenWidth - spacing.md * 2 - (Platform.OS === 'web' ? spacing.md * 2 : 0),
-    maxContentWidth - (Platform.OS === 'web' ? spacing.md * 2 : 0)
-  );
-  const pageWidth = pagerWidth ?? fallback;
-
-  useEffect(() => {
-    const msToNextMinute = 60000 - (Date.now() % 60000);
-    let interval;
-    const timeout = setTimeout(() => {
-      setNow(new Date());
-      interval = setInterval(() => setNow(new Date()), 60000);
-    }, msToNextMinute);
-    return () => {
-      clearTimeout(timeout);
-      if (interval) clearInterval(interval);
-    };
-  }, []);
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     const { data: feat } = await supabase
@@ -194,13 +127,7 @@ export default function HomeScreen() {
       .select('*')
       .eq('featured', true)
       .order('title', { ascending: true });
-
-    const groups = {};
-    for (const s of SECTIONS) groups[s.cuisine] = [];
-    for (const r of feat ?? []) {
-      if (groups[r.cuisine]) groups[r.cuisine].push(r);
-    }
-    setByCuisine(groups);
+    setFeatured(feat ?? []);
 
     if (user) {
       const { data: mine } = await supabase
@@ -223,6 +150,38 @@ export default function HomeScreen() {
       })();
     }, [load])
   );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return featured.filter((r) => {
+      if (filter !== 'all' && r.cuisine !== filter) return false;
+      if (q && !(r.title || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [featured, filter, query]);
+
+  // Compteurs par cuisine (calculés depuis featured, ignorent le search)
+  const counts = useMemo(() => {
+    const by = { all: featured.length };
+    for (const r of featured) {
+      const c = r.cuisine;
+      if (!c) continue;
+      by[c] = (by[c] || 0) + 1;
+    }
+    return by;
+  }, [featured]);
+
+  const filtersWithCount = BASE_FILTERS.map((f) => ({
+    ...f,
+    label: `${f.label} (${counts[f.key] ?? 0})`,
+  }));
+
+  const quickSuggestions = useMemo(() => {
+    return [...filtered]
+      .filter((r) => r.duration && r.duration > 0)
+      .sort((a, b) => (a.duration || 0) - (b.duration || 0))
+      .slice(0, 5);
+  }, [filtered]);
 
   const onAdd = async (recipe) => {
     if (!user) {
@@ -250,140 +209,208 @@ export default function HomeScreen() {
     setAddedTitles((prev) => new Set(prev).add(recipe.title));
   };
 
-  const onScroll = (e) => {
-    const x = e.nativeEvent.contentOffset.x;
-    const idx = Math.round(x / pageWidth);
-    if (idx !== page) setPage(idx);
-  };
-
-  const goToPage = (i) => {
-    pagerRef.current?.scrollTo({ x: i * pageWidth, animated: true });
-    setPage(i);
-  };
+  const username = profile?.username || user?.email?.split('@')[0] || 'Chef';
+  const initial = getInitial(profile?.username, user?.email);
 
   return (
-    <Screen>
-      <View style={styles.dateBlock}>
-        <Text style={styles.date}>{formatDateFr(now)}</Text>
-        <Text style={styles.time}>{formatTimeFr(now)}</Text>
-      </View>
-
-      <Text style={[typography.h1, { marginTop: spacing.xl }]}>Bonjour </Text>
-      <Text style={[typography.small, { marginTop: spacing.xs }]}>
-        Que cuisinons-nous aujourd'hui ?
-      </Text>
-
-      <View
-        style={styles.pagerWrap}
-        onLayout={(e) => {
-          const w = Math.round(e.nativeEvent.layout.width);
-          if (w > 0 && w !== pagerWidth) setPagerWidth(w);
-        }}
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <WebScroll
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 120 + insets.bottom },
+        ]}
       >
+        {/* HEADER */}
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.date}>{formatDateFr(now)}</Text>
+            <Text style={styles.hello} numberOfLines={1}>
+              Bonjour, {username}
+            </Text>
+          </View>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+        </View>
+        <Text style={styles.subtitle}>
+          Que cuisinons-nous aujourd'hui ?
+        </Text>
+
+        {/* SEARCH */}
+        <View style={styles.searchWrap}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Rechercher une recette..."
+            placeholderTextColor="#A9A49C"
+            style={styles.searchInput}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable
+              onPress={() => setQuery('')}
+              hitSlop={8}
+              style={styles.searchClear}
+            >
+              <Text style={styles.searchClearText}>×</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* FILTER CHIPS */}
         <ScrollView
-          ref={pagerRef}
           horizontal
-          pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={onScroll}
-          decelerationRate="fast"
-          snapToInterval={pageWidth}
-          snapToAlignment="start"
-          disableIntervalMomentum
-          style={{ width: pageWidth }}
+          contentContainerStyle={styles.filterScrollContent}
+          style={styles.filterScroll}
         >
-          {SECTIONS.map((s) => (
-            <CuisineSection
-              key={s.cuisine}
-              title={s.title}
-              recipes={byCuisine[s.cuisine] ?? []}
-              loading={loading}
-              addedTitles={addedTitles}
-              addingId={addingId}
-              onAdd={onAdd}
-              onOpen={(r) =>
-                navigation.navigate('RecipeDetail', { recipe: r })
-              }
-              width={pageWidth}
-            />
-          ))}
+          {filtersWithCount.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setFilter(f.key)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  active && styles.chipActive,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
-        <View style={styles.dots}>
-          {SECTIONS.map((_, i) => (
-            <Pressable
-              key={i}
-              onPress={() => goToPage(i)}
-              hitSlop={8}
-              style={[styles.dot, page === i && styles.dotActive]}
-            />
-          ))}
+        {/* POPULAR CAROUSEL */}
+        <Text style={styles.sectionH}>Recettes populaires</Text>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.md }} />
+        ) : filtered.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune recette pour ce filtre.</Text>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.popScrollContent}
+            style={styles.popScroll}
+          >
+            {filtered.map((r) => (
+              <PopularCard
+                key={r.id}
+                recipe={r}
+                added={addedTitles.has(r.title)}
+                adding={addingId === r.id}
+                onAdd={() => onAdd(r)}
+                onOpen={() => navigation.navigate('RecipeDetail', { recipe: r })}
+              />
+            ))}
+          </ScrollView>
+        )}
+
+        {/* QUICK SUGGESTIONS */}
+        <View style={styles.quickHeader}>
+          <Text style={[styles.sectionH, { marginHorizontal: 0, marginTop: 0, marginBottom: 0 }]}>
+            Suggestions rapides
+          </Text>
+          <Pressable
+            onPress={() => {
+              setQuery('');
+              setFilter('all');
+            }}
+            hitSlop={6}
+          >
+            <Text style={styles.seeAll}>Voir tout</Text>
+          </Pressable>
         </View>
-      </View>
-    </Screen>
+        {loading ? null : quickSuggestions.length === 0 ? (
+          <Text style={styles.emptyText}>Pas encore de suggestions.</Text>
+        ) : (
+          <View style={styles.quickList}>
+            {quickSuggestions.map((r) => (
+              <QuickRow
+                key={r.id}
+                recipe={r}
+                onOpen={() => navigation.navigate('RecipeDetail', { recipe: r })}
+              />
+            ))}
+          </View>
+        )}
+      </WebScroll>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  dateBlock: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+    ...(Platform.OS === 'web' ? { paddingTop: 'env(safe-area-inset-top)' } : null),
   },
-  date: { fontSize: 16, fontWeight: '600', color: colors.textMuted },
-  time: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: spacing.xs,
-    letterSpacing: 1,
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingTop: spacing.md,
+    maxWidth: maxContentWidth,
+    alignSelf: 'center',
+    width: '100%',
   },
 
-  pagerWrap: { marginTop: spacing.xl, width: '100%' },
-  section: {
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-    marginBottom: spacing.sm,
-  },
-  box: {
-    height: 400,
-    marginRight: 4,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 2.5,
-    borderColor: colors.primary,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    flexDirection: 'column',
-  },
-  searchWrap: {
+  // Header
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    margin: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    minHeight: 36,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.pill,
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
   },
-  searchIcon: { fontSize: 14 },
+  date: { fontSize: 13, color: '#999' },
+  hello: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 2,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  subtitle: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.md,
+  },
+
+  // Search
+  searchWrap: {
+    marginTop: spacing.md,
+    marginHorizontal: spacing.md,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#EEE',
+  },
+  searchIcon: { fontSize: 16 },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.text,
-    paddingVertical: 0,
+    paddingVertical: 10,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
   searchClear: {
@@ -396,65 +423,130 @@ const styles = StyleSheet.create({
   },
   searchClearText: {
     fontSize: 16,
-    color: colors.textMuted,
+    color: '#999',
     lineHeight: 18,
     marginTop: -1,
   },
-  scroll: { flex: 1 },
-  scrollContent: {
-    padding: spacing.sm,
-    paddingTop: 0,
-    gap: spacing.sm,
-  },
-  center: {
-    flex: 1,
-    padding: spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: '#FFF8F0',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: 64,
-  },
-  rowPressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
-  rowTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
-  rowMeta: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: 2,
-  },
-  addBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 36,
-  },
-  addBtnDone: { backgroundColor: '#EFEFEF' },
-  addBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
+  // Filters — edge-to-edge
+  filterScroll: {
     marginTop: spacing.md,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#E0D7CE',
+  filterScrollContent: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  dotActive: { backgroundColor: colors.primary, width: 20 },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#EEE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
+  chipTextActive: { color: '#fff' },
+
+  // Sections
+  sectionH: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+    marginHorizontal: spacing.md,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.md,
+  },
+
+  // Popular carousel — edge-to-edge
+  popScroll: {},
+  popScrollContent: {
+    gap: 12,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  popCard: {
+    width: 150,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    padding: spacing.md,
+    minHeight: 200,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  popEmoji: { marginBottom: 4 },
+  popTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  popMeta: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '700',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  popAddBtn: {
+    marginTop: spacing.sm,
+    minHeight: 36,
+    width: '100%',
+    backgroundColor: '#FFF0E8',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popAddBtnDone: { backgroundColor: '#EFEFEF' },
+  popAddText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+
+  // Quick suggestions
+  quickHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+    marginHorizontal: spacing.md,
+  },
+  seeAll: { fontSize: 13, color: colors.primary, fontWeight: '700' },
+  quickList: {
+    marginHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  quickRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  quickEmoji: {},
+  quickTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
+  quickMeta: { fontSize: 12, color: '#888', marginTop: 2 },
+  chevron: {
+    fontSize: 24,
+    color: colors.primary,
+    fontWeight: '700',
+  },
 });

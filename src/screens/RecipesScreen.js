@@ -7,15 +7,18 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import RecipeEmoji from '../components/RecipeEmoji';
+import SwipeableCard from '../components/SwipeableCard';
 import {
   colors,
   radius,
   spacing,
-  typography,
   maxContentWidth,
 } from '../theme/theme';
 
@@ -30,17 +33,15 @@ function MetaBadge({ label }) {
   );
 }
 
-function RecipeCard({ recipe, onPress }) {
+function RecipeCardContent({ recipe, onQuickDelete }) {
   const meta = [];
   if (recipe.duration) meta.push(`${recipe.duration} min`);
   if (recipe.servings) meta.push(`${recipe.servings} pers.`);
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-    >
+    <View>
       <View style={styles.titleRow}>
+        <RecipeEmoji title={recipe.title} size={32} />
         <Text style={styles.title} numberOfLines={2}>
           {recipe.title}
         </Text>
@@ -50,6 +51,26 @@ function RecipeCard({ recipe, onPress }) {
           </View>
         )}
       </View>
+
+      {onQuickDelete && (
+        <Pressable
+          onPress={() => onQuickDelete(recipe)}
+          style={styles.trashHit}
+          accessibilityLabel="Supprimer la recette"
+          hitSlop={6}
+        >
+          {({ pressed }) => (
+            <Text
+              style={[
+                styles.trashIcon,
+                { color: pressed ? '#e74c3c' : '#ccc' },
+              ]}
+            >
+              ×
+            </Text>
+          )}
+        </Pressable>
+      )}
 
       {recipe.description ? (
         <Text style={styles.desc} numberOfLines={2}>
@@ -67,15 +88,61 @@ function RecipeCard({ recipe, onPress }) {
           <MetaBadge label={recipe.fat_type} />
         </View>
       )}
-    </Pressable>
+    </View>
   );
 }
+
 
 export default function RecipesScreen({ navigation }) {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [openCardId, setOpenCardId] = useState(null);
+
+  const quickDeleteRecipe = async (recipe) => {
+    const ok = await (Platform.OS === 'web'
+      ? Promise.resolve(
+          window.confirm(
+            'Supprimer cette recette ?\n\nCette action est définitive.'
+          )
+        )
+      : new Promise((resolve) => {
+          Alert.alert(
+            'Supprimer cette recette ?',
+            'Cette action est définitive.',
+            [
+              {
+                text: 'Annuler',
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+              {
+                text: 'Supprimer',
+                style: 'destructive',
+                onPress: () => resolve(true),
+              },
+            ]
+          );
+        }));
+    if (ok) onDeleteRecipe(recipe);
+  };
+
+  const onDeleteRecipe = async (recipe) => {
+    const prev = recipes;
+    setRecipes((p) => p.filter((r) => r.id !== recipe.id));
+    setOpenCardId(null);
+    const { error: delError } = await supabase
+      .from('recipes')
+      .delete()
+      .eq('id', recipe.id);
+    if (delError) {
+      setRecipes(prev);
+      if (Platform.OS === 'web')
+        window.alert(`Suppression impossible\n\n${delError.message}`);
+      else Alert.alert('Suppression impossible', delError.message);
+    }
+  };
 
   const load = useCallback(async () => {
     setError(null);
@@ -108,7 +175,7 @@ export default function RecipesScreen({ navigation }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerInner}>
-          <Text style={typography.h1}>Recettes</Text>
+          <Text style={styles.headerTitle}>Recettes</Text>
           <Pressable
             onPress={() => navigation.navigate('AddRecipe')}
             style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
@@ -133,13 +200,29 @@ export default function RecipesScreen({ navigation }) {
           data={recipes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <RecipeCard
-              recipe={item}
-              onPress={() =>
-                navigation.navigate('RecipeDetail', { recipe: item })
-              }
-            />
+            <View style={styles.cardWrap}>
+              <SwipeableCard
+                id={item.id}
+                openCardId={openCardId}
+                onOpenChange={setOpenCardId}
+                onDelete={() => onDeleteRecipe(item)}
+                onPress={() =>
+                  navigation.navigate('RecipeDetail', { recipe: item })
+                }
+                confirmTitle="Supprimer cette recette ?"
+                confirmMessage="Cette action est définitive."
+                borderRadius={16}
+              >
+                <View style={styles.card}>
+                  <RecipeCardContent
+                    recipe={item}
+                    onQuickDelete={quickDeleteRecipe}
+                  />
+                </View>
+              </SwipeableCard>
+            </View>
           )}
           refreshControl={
             <RefreshControl
@@ -150,11 +233,10 @@ export default function RecipesScreen({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={typography.h3}>Aucune recette</Text>
-              <Text
-                style={[typography.small, { marginTop: spacing.sm, textAlign: 'center' }]}
-              >
-                Appuyez sur + pour créer votre première recette.
+              <Text style={styles.emptyEmoji}>🍳</Text>
+              <Text style={styles.emptyTitle}>Aucune recette pour le moment</Text>
+              <Text style={styles.emptyHint}>
+                Appuyez sur + pour en créer une
               </Text>
             </View>
           }
@@ -167,7 +249,7 @@ export default function RecipesScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 16,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
     alignItems: 'center',
@@ -178,6 +260,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   fab: {
     width: 52,
@@ -201,35 +288,51 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   listContent: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 16,
     paddingBottom: spacing.xxl,
     alignItems: 'center',
+    gap: 12,
+  },
+  cardWrap: {
+    width: '100%',
+    maxWidth: maxContentWidth,
   },
   card: {
     width: '100%',
-    maxWidth: maxContentWidth,
     backgroundColor: '#FFFFFF',
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    // Ombre douce
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingLeft: 16,
+    paddingRight: 40,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    position: 'relative',
   },
-  cardPressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
+  cardPressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
+  trashHit: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trashIcon: { fontSize: 16, fontWeight: '600', lineHeight: 18 },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.sm,
   },
   title: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1A1A1A',
   },
@@ -246,13 +349,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   desc: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    marginTop: spacing.xs,
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#888',
+    marginTop: 6,
+    lineHeight: 18,
   },
   meta: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.primary,
     fontWeight: '700',
     marginTop: spacing.sm,
@@ -260,27 +363,46 @@ const styles = StyleSheet.create({
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: 6,
     marginTop: spacing.sm,
   },
   badge: {
-    backgroundColor: '#FFF1E8',
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    backgroundColor: '#FFF0E8',
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   badgeText: {
     fontSize: 12,
     color: colors.primary,
     fontWeight: '700',
   },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
   empty: {
     alignItems: 'center',
-    paddingVertical: spacing.xxl,
+    paddingVertical: 80,
     maxWidth: maxContentWidth,
+  },
+  emptyEmoji: {
+    fontSize: 60,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: '#AAA',
+    marginTop: 6,
+    textAlign: 'center',
   },
   error: { color: colors.error, textAlign: 'center' },
 });

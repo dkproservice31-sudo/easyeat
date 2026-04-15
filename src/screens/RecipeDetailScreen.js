@@ -14,6 +14,7 @@ import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
 import StepsList from '../components/StepsList';
 import IngredientsList from '../components/IngredientsList';
+import RecipeEmoji from '../components/RecipeEmoji';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { adjustRecipeServings } from '../lib/ai';
@@ -235,13 +236,12 @@ export default function RecipeDetailScreen({ route, navigation }) {
 
   return (
     <Screen>
-      <Text style={[typography.h1, { color: colors.primary }]}>
-        {recipe.title}
-      </Text>
+      <View style={styles.heroEmojiWrap}>
+        <RecipeEmoji title={recipe.title} size={48} />
+      </View>
+      <Text style={styles.heroTitle}>{recipe.title}</Text>
       {recipe.description ? (
-        <Text style={[typography.body, styles.description]}>
-          {recipe.description}
-        </Text>
+        <Text style={styles.description}>{recipe.description}</Text>
       ) : null}
 
       <View style={styles.pills}>
@@ -358,22 +358,36 @@ export default function RecipeDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  heroEmojiWrap: {
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+    textAlign: 'center',
+  },
   description: {
     marginTop: spacing.sm,
-    color: colors.textMuted,
-    lineHeight: 22,
+    color: '#888',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   pills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.lg,
+    justifyContent: 'center',
   },
   pill: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    borderRadius: 12,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minWidth: 96,
@@ -381,21 +395,21 @@ const styles = StyleSheet.create({
   pillLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: '#888',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   pillValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.text,
+    color: '#1A1A1A',
     marginTop: 2,
   },
   section: { marginTop: spacing.xl },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#1A1A1A',
     marginBottom: spacing.sm,
   },
   body: {

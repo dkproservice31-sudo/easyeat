@@ -154,13 +154,6 @@ export default function AddRecipeScreen({ navigation }) {
 
   return (
     <Screen>
-      <Text style={[typography.h1, { color: colors.primary }]}>
-        Nouvelle recette
-      </Text>
-      <Text style={[typography.small, { marginBottom: spacing.xl }]}>
-        Partagez votre création
-      </Text>
-
       <Input
         label="Titre *"
         value={title}

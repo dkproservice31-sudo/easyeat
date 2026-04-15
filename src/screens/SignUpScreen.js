@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Text, View, Alert, Platform } from 'react-native';
+import { Text, View, Alert, Platform, StyleSheet } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../contexts/AuthContext';
-import { spacing, typography, colors } from '../theme/theme';
+import { spacing, colors } from '../theme/theme';
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -53,12 +53,14 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <Screen>
-      <Text style={[typography.h1, { color: colors.primary }]}>Créer un compte</Text>
-      <Text style={[typography.small, { marginBottom: spacing.xl }]}>
-        Rejoignez la communauté EasyEat
-      </Text>
-      <Input
-        label="Nom d'utilisateur"
+      <View style={styles.container}>
+        <View style={styles.hero}>
+          <Text style={styles.heroEmoji}>🍽️</Text>
+          <Text style={styles.heroTitle}>EasyEat</Text>
+          <Text style={styles.heroSubtitle}>Créez votre compte</Text>
+        </View>
+        <Input
+          label="Nom d'utilisateur"
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
@@ -110,6 +112,40 @@ export default function SignUpScreen({ navigation }) {
         onPress={() => navigation.goBack()}
         disabled={loading}
       />
+      </View>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 60,
+  },
+  hero: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  heroEmoji: {
+    fontSize: 60,
+    marginBottom: 12,
+    ...(Platform.OS === 'web'
+      ? {
+          fontFamily:
+            '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif',
+        }
+      : null),
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+});

@@ -12,21 +12,14 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import ChipGroup from '../components/ChipGroup';
-import Button from '../components/Button';
-import {
-  colors,
-  radius,
-  spacing,
-  typography,
-  maxContentWidth,
-  touch,
-} from '../theme/theme';
+import SwipeableCard from '../components/SwipeableCard';
+import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
 
 const UNITS = ['g', 'kg', 'L', 'ml', 'unité'];
 
@@ -47,7 +40,7 @@ function confirmDialog(title, message) {
   });
 }
 
-function FridgeRow({ item, onChangeQty, onDelete }) {
+function FridgeRowContent({ item, onChangeQty, onQuickDelete }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(item.quantity));
 
@@ -62,46 +55,55 @@ function FridgeRow({ item, onChangeQty, onDelete }) {
   };
 
   return (
-    <View style={styles.row}>
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <View style={styles.rowQtyWrap}>
-          {editing ? (
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              onBlur={save}
-              onSubmitEditing={save}
-              keyboardType="decimal-pad"
-              style={styles.qtyInput}
-              autoFocus
-              selectTextOnFocus
-              returnKeyType="done"
-            />
-          ) : (
-            <Pressable
-              onPress={() => {
-                setDraft(String(item.quantity));
-                setEditing(true);
-              }}
-              hitSlop={6}
-              style={styles.qtyTap}
-            >
-              <Text style={styles.qtyText}>{item.quantity}</Text>
-            </Pressable>
-          )}
-          <Text style={styles.unitText}>{item.unit}</Text>
-        </View>
+    <View style={styles.card}>
+      <Text style={styles.cardName} numberOfLines={1}>
+        {item.name}
+      </Text>
+
+      <View style={styles.qtyWrap}>
+        {editing ? (
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            onBlur={save}
+            onSubmitEditing={save}
+            keyboardType="decimal-pad"
+            style={styles.qtyInput}
+            autoFocus
+            selectTextOnFocus
+            returnKeyType="done"
+          />
+        ) : (
+          <Pressable
+            onPress={() => {
+              setDraft(String(item.quantity));
+              setEditing(true);
+            }}
+            hitSlop={6}
+            style={styles.qtyBadge}
+          >
+            <Text style={styles.qtyBadgeText}>{item.quantity}</Text>
+          </Pressable>
+        )}
+        <Text style={styles.unitText}>{item.unit}</Text>
       </View>
+
       <Pressable
-        onPress={() => onDelete(item)}
-        style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.7 }]}
+        onPress={() => onQuickDelete(item)}
+        style={styles.trashHit}
         accessibilityLabel={`Supprimer ${item.name}`}
-        hitSlop={8}
+        hitSlop={6}
       >
-        <Text style={styles.deleteText}>×</Text>
+        {({ pressed }) => (
+          <Text
+            style={[
+              styles.trashIcon,
+              { color: pressed ? '#e74c3c' : '#ccc' },
+            ]}
+          >
+            ×
+          </Text>
+        )}
       </Pressable>
     </View>
   );
@@ -145,52 +147,87 @@ function AddItemModal({ visible, onClose, onAdd }) {
       >
         <Pressable style={styles.modalBackdropTap} onPress={onClose} />
         <View style={styles.modalCard}>
-          <Text style={typography.h2}>Nouvel ingrédient</Text>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.modalTitle}>Nouvel ingrédient</Text>
 
-          <Text style={styles.fieldLabel}>Nom</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Tomates, œufs, lait..."
-            placeholderTextColor={colors.textMuted}
-            style={styles.modalInput}
-            autoFocus
-            maxLength={60}
-          />
-
-          <Text style={styles.fieldLabel}>Quantité</Text>
-          <TextInput
-            value={qty}
-            onChangeText={setQty}
-            placeholder="1"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="decimal-pad"
-            style={styles.modalInput}
-            maxLength={8}
-          />
-
-          <Text style={styles.fieldLabel}>Unité</Text>
-          <ChipGroup
-            options={UNITS}
-            value={unit}
-            onChange={(v) => setUnit(v || 'unité')}
-          />
-
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              title="Ajouter"
-              onPress={submit}
-              loading={saving}
-              disabled={!name.trim()}
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Tomates, œufs, lait..."
+              placeholderTextColor="#A9A49C"
+              style={styles.modalInput}
+              autoFocus
+              maxLength={60}
             />
-            <View style={{ height: spacing.sm }} />
-            <Button
-              title="Annuler"
-              variant="ghost"
-              onPress={onClose}
-              disabled={saving}
+
+            <Text style={styles.fieldLabel}>Quantité</Text>
+            <TextInput
+              value={qty}
+              onChangeText={setQty}
+              placeholder="1"
+              placeholderTextColor="#A9A49C"
+              keyboardType="decimal-pad"
+              style={styles.modalInput}
+              maxLength={8}
             />
-          </View>
+
+            <Text style={styles.fieldLabel}>Unité</Text>
+            <View style={styles.unitRow}>
+              {UNITS.map((u) => {
+                const active = unit === u;
+                return (
+                  <Pressable
+                    key={u}
+                    onPress={() => setUnit(u)}
+                    style={({ pressed }) => [
+                      styles.unitChip,
+                      active && styles.unitChipActive,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.unitChipText,
+                        active && styles.unitChipTextActive,
+                      ]}
+                    >
+                      {u}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={submit}
+                disabled={!name.trim() || saving}
+                style={({ pressed }) => [
+                  styles.modalAddBtn,
+                  (!name.trim() || saving) && { opacity: 0.5 },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.modalAddText}>
+                  {saving ? '...' : 'Ajouter'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onClose}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.modalCancelBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -203,6 +240,7 @@ export default function FridgeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [openCardId, setOpenCardId] = useState(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -246,7 +284,6 @@ export default function FridgeScreen() {
   };
 
   const changeQty = async (item, quantity) => {
-    // Optimistic
     setItems((prev) =>
       prev.map((x) => (x.id === item.id ? { ...x, quantity } : x))
     );
@@ -264,14 +301,18 @@ export default function FridgeScreen() {
     }
   };
 
-  const deleteItem = async (item) => {
+  const quickDeleteItem = async (item) => {
     const ok = await confirmDialog(
       `Supprimer ${item.name} ?`,
       'Suppression définitive.'
     );
-    if (!ok) return;
+    if (ok) deleteItem(item);
+  };
+
+  const deleteItem = async (item) => {
     const prev = items;
     setItems((p) => p.filter((x) => x.id !== item.id));
+    setOpenCardId(null);
     const { error } = await supabase
       .from('fridge_items')
       .delete()
@@ -286,10 +327,18 @@ export default function FridgeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerInner}>
-          <Text style={typography.h1}>Mon Frigo</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Mon Frigo</Text>
+            <Text style={styles.headerCount}>
+              {items.length} ingrédient{items.length > 1 ? 's' : ''}
+            </Text>
+          </View>
           <Pressable
             onPress={() => setModalOpen(true)}
-            style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+            style={({ pressed }) => [
+              styles.fab,
+              pressed && styles.fabPressed,
+            ]}
             accessibilityLabel="Ajouter un ingrédient"
             hitSlop={8}
           >
@@ -307,12 +356,25 @@ export default function FridgeScreen() {
           data={items}
           keyExtractor={(it) => it.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <FridgeRow
-              item={item}
-              onChangeQty={changeQty}
-              onDelete={deleteItem}
-            />
+            <View style={styles.cardWrap}>
+              <SwipeableCard
+                id={item.id}
+                openCardId={openCardId}
+                onOpenChange={setOpenCardId}
+                onDelete={() => deleteItem(item)}
+                confirmTitle={`Supprimer ${item.name} ?`}
+                confirmMessage="Suppression définitive."
+                borderRadius={14}
+              >
+                <FridgeRowContent
+                  item={item}
+                  onChangeQty={changeQty}
+                  onQuickDelete={quickDeleteItem}
+                />
+              </SwipeableCard>
+            </View>
           )}
           refreshControl={
             <RefreshControl
@@ -323,14 +385,10 @@ export default function FridgeScreen() {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={typography.h3}>Frigo vide</Text>
-              <Text
-                style={[
-                  typography.small,
-                  { marginTop: spacing.sm, textAlign: 'center' },
-                ]}
-              >
-                Appuyez sur + pour ajouter un ingrédient.
+              <Text style={styles.emptyEmoji}>❄️</Text>
+              <Text style={styles.emptyTitle}>Frigo vide</Text>
+              <Text style={styles.emptyHint}>
+                Appuyez sur + pour ajouter un ingrédient
               </Text>
             </View>
           }
@@ -348,22 +406,35 @@ export default function FridgeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+
+  // Header
   header: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 16,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-    alignItems: 'center',
   },
   headerInner: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  headerCount: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
   },
   fab: {
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -377,90 +448,93 @@ const styles = StyleSheet.create({
   fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   fabText: {
     color: '#fff',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '600',
-    lineHeight: 30,
+    lineHeight: 26,
     marginTop: -2,
   },
+
+  // List
   listContent: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxl,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 120,
+    alignItems: 'stretch',
+    gap: 8,
   },
-  row: {
+
+  cardWrap: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
+  },
+
+  // Card
+  card: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    paddingLeft: 16,
+    paddingRight: 38,
+    paddingVertical: 14,
     gap: spacing.sm,
+    minHeight: 60,
   },
-  rowInfo: {
+  cardName: {
     flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  qtyWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: 6,
   },
-  rowName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  rowQtyWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  qtyTap: {
-    minWidth: 44,
-    minHeight: 36,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: '#FFF1E8',
+  qtyBadge: {
+    height: 36,
+    width: 50,
+    backgroundColor: '#FFF0E8',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyText: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
+  qtyBadgeText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+  },
   qtyInput: {
-    minWidth: 64,
-    minHeight: 36,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
+    width: 50,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primary,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
+    color: '#1A1A1A',
     textAlign: 'center',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
-  unitText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    fontWeight: '600',
-  },
-  deleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.error,
+  unitText: { fontSize: 13, color: '#888', fontWeight: '600' },
+  trashHit: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 22,
-    marginTop: -2,
-  },
+  trashIcon: { fontSize: 16, fontWeight: '600', lineHeight: 18 },
+
+  // State
   center: {
     flex: 1,
     alignItems: 'center',
@@ -469,41 +543,115 @@ const styles = StyleSheet.create({
   },
   empty: {
     alignItems: 'center',
-    paddingVertical: spacing.xxl,
-    maxWidth: maxContentWidth,
+    paddingVertical: 80,
+  },
+  emptyEmoji: { fontSize: 60, marginBottom: 16 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'center',
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 6,
+    textAlign: 'center',
   },
 
-  // Modal
+  // Modal : positionnée en haut
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    padding: spacing.md,
+    paddingTop: 10,
+    paddingHorizontal: 16,
   },
   modalBackdropTap: { ...StyleSheet.absoluteFillObject },
   modalCard: {
     width: '100%',
     maxWidth: maxContentWidth,
-    backgroundColor: colors.background,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+    maxHeight: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 6,
   },
   fieldLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginTop: 10,
+    marginBottom: 6,
   },
   modalInput: {
-    minHeight: touch.minHeight,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
+    minHeight: 44,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
     fontSize: 16,
-    color: colors.text,
+    color: '#1A1A1A',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
+  },
+  unitRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+  },
+  unitChip: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  unitChipText: { fontSize: 13, fontWeight: '700', color: '#666' },
+  unitChipTextActive: { color: '#fff' },
+  modalActions: {
+    marginTop: 10,
+    gap: 8,
+  },
+  modalAddBtn: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalAddText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  modalCancelBtn: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

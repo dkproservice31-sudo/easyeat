@@ -106,10 +106,13 @@ export default function AIScreen() {
 
   return (
     <Screen>
-      <Text style={[typography.h1, { color: colors.primary }]}>Studio IA</Text>
-      <Text style={[typography.small, { marginBottom: spacing.xl }]}>
-        Gemini 2.5 Flash génère votre recette sur mesure
-      </Text>
+      <View style={styles.header}>
+        <Text style={styles.heroEmoji}>✨</Text>
+        <Text style={styles.heroTitle}>Studio IA</Text>
+        <Text style={styles.heroSubtitle}>
+          Notre IA génère votre recette sur mesure
+        </Text>
+      </View>
 
       <Text style={styles.label}>Nombre de personnes</Text>
       <ServingsSelector
@@ -118,9 +121,9 @@ export default function AIScreen() {
         disabled={generating}
       />
 
-      <View style={{ marginTop: spacing.md }}>
+      <View style={{ marginTop: spacing.lg }}>
+        <Text style={styles.label}>Votre envie</Text>
         <Input
-          label="Votre envie"
           value={prompt}
           onChangeText={setPrompt}
           placeholder="une recette italienne avec des pâtes..."
@@ -172,13 +175,46 @@ export default function AIScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  heroEmoji: {
+    fontSize: 40,
+    textAlign: 'center',
+    marginBottom: 6,
+    ...(Platform.OS === 'web'
+      ? {
+          fontFamily:
+            '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif',
+        }
+      : null),
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
     marginBottom: spacing.sm,
   },
-  multiline: { minHeight: 80, paddingTop: spacing.md },
+  multiline: {
+    minHeight: 100,
+    padding: 14,
+    paddingTop: 14,
+    fontSize: 16,
+  },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -198,5 +234,5 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: colors.primary },
   checkboxTick: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  checkLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
+  checkLabel: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
 });

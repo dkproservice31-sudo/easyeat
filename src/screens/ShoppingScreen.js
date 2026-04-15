@@ -4,13 +4,13 @@ import {
   View,
   Pressable,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   RefreshControl,
   Alert,
   Platform,
   Modal,
 } from 'react-native';
+import WebScroll from '../components/WebScroll';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,6 +21,7 @@ import {
   cleanIngredientName,
   findInFridge,
 } from '../lib/ingredients';
+import RecipeEmoji from '../components/RecipeEmoji';
 import {
   colors,
   radius,
@@ -56,7 +57,7 @@ function ShoppingItemRow({ item, checked, onToggle }) {
       accessibilityLabel={item.name}
     >
       <View style={[styles.circle, checked && styles.circleChecked]}>
-        {checked && <View style={styles.circleDot} />}
+        {checked && <Text style={styles.circleCheck}>✓</Text>}
       </View>
       <Text
         style={[styles.name, checked && styles.nameChecked]}
@@ -84,9 +85,12 @@ function RecipeCard({ recipe, fridge, onAddAll, adding }) {
 
   return (
     <View style={styles.recipeCard}>
-      <Text style={styles.recipeTitle} numberOfLines={2}>
-        {recipe.title}
-      </Text>
+      <View style={styles.recipeTitleRow}>
+        <RecipeEmoji title={recipe.title} size={24} />
+        <Text style={styles.recipeTitle} numberOfLines={2}>
+          {recipe.title}
+        </Text>
+      </View>
 
       {items.length === 0 ? (
         <Text style={[typography.small, { marginTop: spacing.sm }]}>
@@ -105,9 +109,7 @@ function RecipeCard({ recipe, fridge, onAddAll, adding }) {
               <Text
                 style={[
                   styles.ingText,
-                  it.inStock
-                    ? { color: '#0A6E50' }
-                    : { color: '#9A1B2A' },
+                  it.inStock ? styles.ingInStockText : styles.ingMissingText,
                 ]}
                 numberOfLines={1}
               >
@@ -433,7 +435,11 @@ export default function ShoppingScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerInner}>
-          <Text style={typography.h1}>Mes Courses</Text>
+          <Text style={styles.headerTitle}>Mes Courses</Text>
+          <Text style={styles.sectionHint}>
+            {fridge.filter((f) => Number(f.quantity) === 0).length} à acheter ·{' '}
+            {checked.size} dans le caddie
+          </Text>
         </View>
       </View>
 
@@ -442,7 +448,7 @@ export default function ShoppingScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <ScrollView
+        <WebScroll
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
@@ -487,17 +493,14 @@ export default function ShoppingScreen() {
                 );
               })()}
           </View>
-          <Text style={styles.sectionHint}>
-            {shoppingList.length} à acheter · {checked.size} dans le caddie
-          </Text>
           {shoppingList.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={typography.small}>
-                Aucune course à faire pour le moment.
+              <Text style={styles.emptyText}>
+                Aucune course à faire pour le moment
               </Text>
             </View>
           ) : (
-            <View style={{ gap: spacing.sm }}>
+            <View style={{ gap: 8 }}>
               {shoppingList.map((item) => (
                 <ShoppingItemRow
                   key={item.id}
@@ -510,17 +513,17 @@ export default function ShoppingScreen() {
           )}
 
           {/* Section 2 : recettes et leurs ingrédients */}
-          <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
             Mes recettes
           </Text>
           {recipes.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={typography.small}>
-                Vous n'avez pas encore de recettes.
+              <Text style={styles.emptyText}>
+                Vous n'avez pas encore de recettes
               </Text>
             </View>
           ) : (
-            <View style={{ gap: spacing.md }}>
+            <View style={{ gap: 12 }}>
               {recipes.map((r) => (
                 <RecipeCard
                   key={r.id}
@@ -542,7 +545,7 @@ export default function ShoppingScreen() {
               ))}
             </View>
           )}
-        </ScrollView>
+        </WebScroll>
       )}
 
       {shoppingList.length > 0 && (
@@ -579,93 +582,101 @@ export default function ShoppingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 16,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-    alignItems: 'center',
   },
   headerInner: {
     width: '100%',
     maxWidth: maxContentWidth,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignSelf: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 16,
     paddingTop: spacing.sm,
     paddingBottom: 120,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   sectionTitle: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     fontSize: 18,
     fontWeight: '700',
-    color: colors.primary,
-    marginBottom: spacing.xs,
+    color: '#1A1A1A',
+    marginBottom: 6,
   },
   sectionHeaderRow: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.xs,
+    marginBottom: 6,
   },
   toggleAllBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: '#FFF1E8',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#FFF0E8',
   },
   toggleAllText: {
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   sectionHint: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     fontSize: 13,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
+    color: '#888',
+    marginBottom: 10,
   },
   empty: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     padding: spacing.lg,
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
   },
+  emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
 
+  // Ingredient row (shopping list)
   row: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: spacing.md,
     minHeight: 56,
   },
   rowPressed: { opacity: 0.85 },
   circle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#C9C9C9',
-    backgroundColor: '#F2F2F2',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#DDDDDD',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -673,35 +684,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  circleDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
+  circleCheck: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: -1,
   },
   name: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
+    color: '#1A1A1A',
   },
   nameChecked: {
     textDecorationLine: 'line-through',
-    color: colors.textMuted,
+    color: '#AAA',
   },
-  qtyText: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
+  qtyText: { fontSize: 13, color: '#888', fontWeight: '600' },
 
-  // Carte recette
+  // Recipe card
   recipeCard: {
     width: '100%',
     maxWidth: maxContentWidth,
+    alignSelf: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    padding: spacing.md,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    padding: 16,
+  },
+  recipeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   recipeTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
@@ -710,38 +729,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
+    gap: 6,
+    marginTop: 10,
     width: '100%',
   },
   ingChip: {
     flexShrink: 1,
     maxWidth: '100%',
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   ingInStock: {
-    backgroundColor: '#E6F7EE',
-    borderColor: '#0A6E50',
+    backgroundColor: '#E8F5E9',
+    borderColor: '#C8E6C9',
   },
   ingMissing: {
-    backgroundColor: '#FDECEE',
-    borderColor: '#9A1B2A',
+    backgroundColor: '#FFEBEE',
+    borderColor: '#FFCDD2',
   },
+  ingInStockText: { color: '#2E7D32' },
+  ingMissingText: { color: '#C62828' },
   ingText: { fontSize: 12, fontWeight: '600' },
   addAllBtn: {
-    marginTop: spacing.md,
+    marginTop: 12,
     backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 40,
+    minHeight: 44,
   },
-  addAllText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  addAllText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 
   center: {
     flex: 1,
@@ -756,17 +777,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    padding: spacing.md,
+    padding: 16,
     alignItems: 'center',
     backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F0E8E0',
   },
   finishBtn: {
     width: '100%',
     maxWidth: maxContentWidth,
     minHeight: 52,
-    borderRadius: radius.pill,
+    borderRadius: 12,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',

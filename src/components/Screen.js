@@ -1,24 +1,22 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import WebScroll from './WebScroll';
 import { colors, maxContentWidth, spacing } from '../theme/theme';
 
 export default function Screen({ children, scroll = true, style }) {
-  const Inner = (
-    <View style={[styles.inner, style]}>{children}</View>
-  );
+  const Inner = <View style={[styles.inner, style]}>{children}</View>;
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.center}>
         {scroll ? (
-          <ScrollView
+          <WebScroll
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             {Inner}
-          </ScrollView>
+          </WebScroll>
         ) : (
           Inner
         )}
