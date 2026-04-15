@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import RecipeEmoji from '../components/RecipeEmoji';
+import FadeInView from '../components/FadeInView';
+import { formatDuration } from '../lib/formatDuration';
 import SwipeableCard from '../components/SwipeableCard';
 import {
   colors,
@@ -35,7 +37,7 @@ function MetaBadge({ label }) {
 
 function RecipeCardContent({ recipe, onQuickDelete }) {
   const meta = [];
-  if (recipe.duration) meta.push(`${recipe.duration} min`);
+  if (recipe.duration) meta.push(formatDuration(recipe.duration));
   if (recipe.servings) meta.push(`${recipe.servings} pers.`);
 
   return (
@@ -201,8 +203,11 @@ export default function RecipesScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={styles.cardWrap}>
+          renderItem={({ item, index }) => (
+            <FadeInView
+              delay={Math.min(index * 60, 600)}
+              style={styles.cardWrap}
+            >
               <SwipeableCard
                 id={item.id}
                 openCardId={openCardId}
@@ -222,7 +227,7 @@ export default function RecipesScreen({ navigation }) {
                   />
                 </View>
               </SwipeableCard>
-            </View>
+            </FadeInView>
           )}
           refreshControl={
             <RefreshControl

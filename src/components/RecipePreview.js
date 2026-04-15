@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import StepsList from './StepsList';
 import IngredientsList from './IngredientsList';
+import { formatDuration } from '../lib/formatDuration';
 import { colors, radius, spacing } from '../theme/theme';
 
 function Pill({ label, value }) {
@@ -24,7 +25,7 @@ export default function RecipePreview({ recipe }) {
       ) : null}
 
       <View style={styles.pills}>
-        <Pill label="Durée" value={recipe.duration ? `${recipe.duration} min` : null} />
+        <Pill label="Durée" value={recipe.duration ? formatDuration(recipe.duration) : null} />
         <Pill label="Température" value={recipe.cooking_temp ? `${recipe.cooking_temp}°C` : null} />
         <Pill label="Cuisson" value={recipe.cooking_type} />
         <Pill label="Matière grasse" value={recipe.fat_type} />

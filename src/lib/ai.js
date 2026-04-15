@@ -50,7 +50,12 @@ async function callGemini(prompt) {
   return JSON.parse(text);
 }
 
-export async function generateRecipe({ servings, prompt, fridgeItems = [] }) {
+export async function generateRecipe({
+  servings,
+  prompt,
+  fridgeItems = [],
+  cuisine,
+}) {
   const fridgeStr =
     fridgeItems.length > 0
       ? `\n\nIngrédients disponibles dans le frigo (utilise-les en priorité) :\n${fridgeItems
@@ -58,10 +63,14 @@ export async function generateRecipe({ servings, prompt, fridgeItems = [] }) {
           .join('\n')}`
       : '';
 
+  const cuisineStr = cuisine
+    ? `\n\nLa recette doit appartenir à la cuisine ${cuisine}.`
+    : '';
+
   const text = `Tu es un chef cuisinier francophone. Génère une recette complète pour ${servings} personne${servings > 1 ? 's' : ''}.
 
 Demande de l'utilisateur : ${prompt || 'surprends-moi avec une recette savoureuse'}
-${fridgeStr}
+${cuisineStr}${fridgeStr}
 
 Contraintes :
 - Les quantités d'ingrédients doivent être adaptées pour ${servings} personne${servings > 1 ? 's' : ''}
@@ -74,6 +83,102 @@ Contraintes :
 - Réponds en français.`;
 
   return callGemini(text);
+}
+
+// Demande à Gemini une LISTE de N titres de recettes pour une cuisine donnée.
+// `existingTitles` : tableau des titres déjà en base pour éviter les doublons.
+export async function generateRecipeTitles({ cuisine, count, existingTitles = [] }) {
+  const key = process.env.EXPO_PUBLIC_GEMINI_KEY || '';
+  if (!key) {
+    throw new Error(
+      "La génération IA n'est pas disponible pour le moment."
+    );
+  }
+  const exclusion =
+    existingTitles.length > 0
+      ? `\n\nIMPORTANT : Ne PAS proposer ces recettes qui existent déjà :\n${existingTitles
+          .map((t) => `- ${t}`)
+          .join('\n')}\nPropose uniquement des recettes DIFFÉRENTES et NOUVELLES.`
+      : '';
+  const prompt = `Donne-moi une liste de ${count} recettes ${cuisine} populaires et traditionnelles distinctes. Garde le nom original du plat dans sa langue d'origine (par exemple "Dolma", "Khorovats", "Byorek" pour les recettes arméniennes, ne traduis pas ces noms). Réponds uniquement avec la liste des titres, un par ligne, sans numérotation ni commentaire.${exclusion}`;
+  const res = await fetch(`${ENDPOINT}?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.9 },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Gemini ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return text
+    .split(/\r?\n/)
+    .map((s) => s.replace(/^\s*\d+\s*[\.\)\-:]\s*/, '').trim())
+    .map((s) => s.replace(/^[-•*]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, count);
+}
+
+// Génère N recettes complètes pour une cuisine donnée. Appelle Gemini une fois
+// pour obtenir les titres, puis une fois par titre pour la recette complète.
+// onProgress(done, total, titleEnCours) est appelé à chaque étape.
+// existingTitles : liste des titres déjà en base → exclusion côté prompt + filtre côté client.
+// Retourne { recipes, skipped } où skipped est le nombre de doublons filtrés.
+export async function generateRecipesBatch({
+  cuisine,
+  count,
+  onProgress,
+  existingTitles = [],
+}) {
+  const rawTitles = await generateRecipeTitles({
+    cuisine,
+    count,
+    existingTitles,
+  });
+
+  // Filtrage côté client : on écarte tout titre qui matche (insensible casse)
+  // un titre existant OU un autre titre déjà choisi dans ce batch.
+  const existingSet = new Set(
+    existingTitles.map((t) => (t || '').trim().toLowerCase())
+  );
+  const uniqueTitles = [];
+  const seen = new Set();
+  let skipped = 0;
+  for (const t of rawTitles) {
+    const key = t.trim().toLowerCase();
+    if (!key) continue;
+    if (existingSet.has(key) || seen.has(key)) {
+      skipped++;
+      continue;
+    }
+    seen.add(key);
+    uniqueTitles.push(t);
+  }
+
+  const recipes = [];
+  for (let i = 0; i < uniqueTitles.length; i++) {
+    const title = uniqueTitles[i];
+    if (onProgress) onProgress(i, uniqueTitles.length, title);
+    try {
+      const r = await generateRecipe({
+        servings: 2,
+        prompt: `Recette traditionnelle ${cuisine} : "${title}". Utilise exactement "${title}" comme titre (nom original du plat, ne pas traduire). Rédige la description, les ingrédients (avec quantités) et les étapes de préparation EN FRANÇAIS.`,
+        cuisine,
+      });
+      // Force le titre demandé si Gemini a dévié
+      r.title = r.title || title;
+      if (r.cooking_temp === 0) r.cooking_temp = null;
+      recipes.push(r);
+    } catch (err) {
+      // On continue même si une recette échoue
+      console.warn(`Échec ${title}:`, err.message);
+    }
+  }
+  if (onProgress) onProgress(uniqueTitles.length, uniqueTitles.length, null);
+  return { recipes, skipped };
 }
 
 export async function adjustRecipeServings({ recipe, newServings }) {

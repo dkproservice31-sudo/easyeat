@@ -19,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import SwipeableCard from '../components/SwipeableCard';
+import FadeInView from '../components/FadeInView';
 import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
 
 const UNITS = ['g', 'kg', 'L', 'ml', 'unité'];
@@ -357,8 +358,11 @@ export default function FridgeScreen() {
           keyExtractor={(it) => it.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={styles.cardWrap}>
+          renderItem={({ item, index }) => (
+            <FadeInView
+              delay={Math.min(index * 50, 500)}
+              style={styles.cardWrap}
+            >
               <SwipeableCard
                 id={item.id}
                 openCardId={openCardId}
@@ -374,7 +378,7 @@ export default function FridgeScreen() {
                   onQuickDelete={quickDeleteItem}
                 />
               </SwipeableCard>
-            </View>
+            </FadeInView>
           )}
           refreshControl={
             <RefreshControl

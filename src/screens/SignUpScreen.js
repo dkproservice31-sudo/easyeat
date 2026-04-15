@@ -13,6 +13,9 @@ function notify(title, message) {
 
 export default function SignUpScreen({ navigation }) {
   const { signUp } = useAuth();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [age, setAge] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,13 +25,18 @@ export default function SignUpScreen({ navigation }) {
 
   const validate = () => {
     const e = {};
+    if (!firstName.trim()) e.firstName = 'Prénom requis';
+    if (!lastName.trim()) e.lastName = 'Nom requis';
+    if (!age.trim()) e.age = 'Âge requis';
+    else if (isNaN(+age) || +age < 1 || +age > 149) e.age = 'Âge invalide';
     if (!username.trim()) e.username = "Nom d'utilisateur requis";
     else if (username.trim().length < 3) e.username = 'Au moins 3 caractères';
     if (!email.trim()) e.email = 'Email requis';
     else if (!/^\S+@\S+\.\S+$/.test(email.trim())) e.email = 'Email invalide';
     if (!password) e.password = 'Mot de passe requis';
     else if (password.length < 6) e.password = 'Au moins 6 caractères';
-    if (confirm !== password) e.confirm = 'Les mots de passe ne correspondent pas';
+    if (confirm !== password)
+      e.confirm = 'Les mots de passe ne correspondent pas';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -36,11 +44,14 @@ export default function SignUpScreen({ navigation }) {
   const onSubmit = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { data, error } = await signUp(email, password, username);
+    const { data, error } = await signUp(email, password, username, {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      age: parseInt(age, 10),
+    });
     setLoading(false);
     if (error) return notify('Inscription impossible', error.message);
 
-    // Si confirmation email activée: pas de session immédiate
     if (!data?.session) {
       notify(
         'Vérifiez votre email',
@@ -48,7 +59,6 @@ export default function SignUpScreen({ navigation }) {
       );
       navigation.navigate('SignIn');
     }
-    // Sinon, AuthContext bascule automatiquement vers l'app
   };
 
   return (
@@ -59,59 +69,100 @@ export default function SignUpScreen({ navigation }) {
           <Text style={styles.heroTitle}>EasyEat</Text>
           <Text style={styles.heroSubtitle}>Créez votre compte</Text>
         </View>
+
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Input
+              label="Prénom"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Marie"
+              error={errors.firstName}
+              editable={!loading}
+              maxLength={40}
+              autoCapitalize="words"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input
+              label="Nom"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Dupont"
+              error={errors.lastName}
+              editable={!loading}
+              maxLength={40}
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+
+        <View style={{ maxWidth: 140 }}>
+          <Input
+            label="Âge"
+            value={age}
+            onChangeText={setAge}
+            placeholder="25"
+            keyboardType="number-pad"
+            error={errors.age}
+            editable={!loading}
+            maxLength={3}
+          />
+        </View>
+
         <Input
           label="Nom d'utilisateur"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="chefmarie"
-        error={errors.username}
-        editable={!loading}
-      />
-      <Input
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        autoComplete="email"
-        textContentType="emailAddress"
-        placeholder="vous@exemple.com"
-        error={errors.email}
-        editable={!loading}
-      />
-      <Input
-        label="Mot de passe"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoComplete="password-new"
-        textContentType="newPassword"
-        placeholder="Au moins 6 caractères"
-        error={errors.password}
-        editable={!loading}
-      />
-      <Input
-        label="Confirmer le mot de passe"
-        value={confirm}
-        onChangeText={setConfirm}
-        secureTextEntry
-        autoComplete="password-new"
-        placeholder="••••••••"
-        error={errors.confirm}
-        editable={!loading}
-        onSubmitEditing={onSubmit}
-      />
-      <Button title="S'inscrire" onPress={onSubmit} loading={loading} />
-      <View style={{ height: spacing.md }} />
-      <Button
-        title="Retour"
-        variant="ghost"
-        onPress={() => navigation.goBack()}
-        disabled={loading}
-      />
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="chefmarie"
+          error={errors.username}
+          editable={!loading}
+        />
+        <Input
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          placeholder="vous@exemple.com"
+          error={errors.email}
+          editable={!loading}
+        />
+        <Input
+          label="Mot de passe"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoComplete="password-new"
+          textContentType="newPassword"
+          placeholder="Au moins 6 caractères"
+          error={errors.password}
+          editable={!loading}
+        />
+        <Input
+          label="Confirmer le mot de passe"
+          value={confirm}
+          onChangeText={setConfirm}
+          secureTextEntry
+          autoComplete="password-new"
+          placeholder="••••••••"
+          error={errors.confirm}
+          editable={!loading}
+          onSubmitEditing={onSubmit}
+        />
+        <Button title="S'inscrire" onPress={onSubmit} loading={loading} />
+        <View style={{ height: spacing.md }} />
+        <Button
+          title="Retour"
+          variant="ghost"
+          onPress={() => navigation.goBack()}
+          disabled={loading}
+        />
       </View>
     </Screen>
   );
@@ -147,5 +198,9 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
     marginTop: 6,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 });

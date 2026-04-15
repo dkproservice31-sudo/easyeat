@@ -14,18 +14,20 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import WebScroll from '../components/WebScroll';
 import RecipeEmoji from '../components/RecipeEmoji';
+import FadeInView from '../components/FadeInView';
+import PressableScale from '../components/PressableScale';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { formatDateFr } from '../lib/dateFr';
 import { getRecipeEmoji } from '../lib/recipeEmoji';
+import { formatDuration } from '../lib/formatDuration';
 import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
 
-const BASE_FILTERS = [
-  { key: 'all', label: 'Tout' },
-  { key: 'française', label: 'Françaises' },
-  { key: 'italienne', label: 'Italiennes' },
-  { key: 'espagnole', label: 'Espagnoles' },
-];
+// Met la première lettre en capitale pour l'affichage
+function capitalize(s) {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -46,52 +48,59 @@ function getInitial(username, email) {
   return base.charAt(0).toUpperCase();
 }
 
-function PopularCard({ recipe, added, adding, onAdd, onOpen }) {
+function PopularCard({
+  recipe,
+  added,
+  adding,
+  onAdd,
+  onOpen,
+  canInteract = true,
+  showAddButton = true,
+}) {
   return (
-    <Pressable
-      onPress={onOpen}
-      style={({ pressed }) => [
-        styles.popCard,
-        pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
-      ]}
+    <PressableScale
+      onPress={canInteract ? onOpen : undefined}
+      disabled={!canInteract}
+      style={styles.popCard}
     >
       <RecipeEmoji title={recipe.title} size={40} style={styles.popEmoji} />
       <Text style={styles.popTitle} numberOfLines={2}>
         {recipe.title}
       </Text>
       <Text style={styles.popMeta} numberOfLines={1}>
-        {recipe.duration ? `${recipe.duration} min` : ''}
+        {recipe.duration ? formatDuration(recipe.duration) : ''}
         {recipe.duration && recipe.servings ? ' · ' : ''}
         {recipe.servings ? `${recipe.servings} pers.` : ''}
       </Text>
-      <Pressable
-        onPress={onAdd}
-        disabled={added || adding}
-        style={({ pressed }) => [
-          styles.popAddBtn,
-          added && styles.popAddBtnDone,
-          pressed && !added && !adding && { opacity: 0.85 },
-          adding && { opacity: 0.6 },
-        ]}
-      >
-        <Text
-          style={[styles.popAddText, added && { color: colors.textMuted }]}
+      {showAddButton && (
+        <Pressable
+          onPress={onAdd}
+          disabled={added || adding}
+          style={({ pressed }) => [
+            styles.popAddBtn,
+            added && styles.popAddBtnDone,
+            pressed && !added && !adding && { opacity: 0.85 },
+            adding && { opacity: 0.6 },
+          ]}
         >
-          {added ? 'Ajoutée ✓' : adding ? '...' : 'Ajouter'}
-        </Text>
-      </Pressable>
-    </Pressable>
+          <Text
+            style={[styles.popAddText, added && { color: colors.textMuted }]}
+          >
+            {added ? 'Ajoutée ✓' : adding ? '...' : 'Ajouter'}
+          </Text>
+        </Pressable>
+      )}
+    </PressableScale>
   );
 }
 
-function QuickRow({ recipe, onOpen }) {
+function QuickRow({ recipe, onOpen, canInteract = true }) {
   return (
-    <Pressable
-      onPress={onOpen}
-      style={({ pressed }) => [
-        styles.quickRow,
-        pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] },
-      ]}
+    <PressableScale
+      onPress={canInteract ? onOpen : undefined}
+      disabled={!canInteract}
+      style={styles.quickRow}
+      scaleTo={0.95}
     >
       <RecipeEmoji title={recipe.title} size={32} style={styles.quickEmoji} />
       <View style={{ flex: 1 }}>
@@ -99,12 +108,12 @@ function QuickRow({ recipe, onOpen }) {
           {recipe.title}
         </Text>
         <Text style={styles.quickMeta} numberOfLines={1}>
-          {recipe.duration ? `${recipe.duration} min` : 'Classique'}
+          {recipe.duration ? formatDuration(recipe.duration) : 'Classique'}
           {recipe.servings ? ` · ${recipe.servings} pers.` : ''}
         </Text>
       </View>
       <Text style={styles.chevron}>›</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -126,6 +135,7 @@ export default function HomeScreen() {
       .from('recipes')
       .select('*')
       .eq('featured', true)
+      .eq('published', true)
       .order('title', { ascending: true });
     setFeatured(feat ?? []);
 
@@ -154,27 +164,37 @@ export default function HomeScreen() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return featured.filter((r) => {
-      if (filter !== 'all' && r.cuisine !== filter) return false;
+      if (
+        filter !== 'all' &&
+        (r.cuisine || '').trim().toLowerCase() !== filter
+      )
+        return false;
       if (q && !(r.title || '').toLowerCase().includes(q)) return false;
       return true;
     });
   }, [featured, filter, query]);
 
-  // Compteurs par cuisine (calculés depuis featured, ignorent le search)
-  const counts = useMemo(() => {
-    const by = { all: featured.length };
+  // Compteurs + chips 100% dynamiques à partir des recettes featured publiées
+  const filtersWithCount = useMemo(() => {
+    const counts = {};
     for (const r of featured) {
-      const c = r.cuisine;
+      const c = (r.cuisine || '').trim().toLowerCase();
       if (!c) continue;
-      by[c] = (by[c] || 0) + 1;
+      counts[c] = (counts[c] || 0) + 1;
     }
-    return by;
+    // Trie par nombre décroissant puis alphabétique
+    const cuisineKeys = Object.keys(counts).sort((a, b) => {
+      const diff = counts[b] - counts[a];
+      return diff !== 0 ? diff : a.localeCompare(b);
+    });
+    return [
+      { key: 'all', label: `Tout (${featured.length})` },
+      ...cuisineKeys.map((k) => ({
+        key: k,
+        label: `${capitalize(k)} (${counts[k]})`,
+      })),
+    ];
   }, [featured]);
-
-  const filtersWithCount = BASE_FILTERS.map((f) => ({
-    ...f,
-    label: `${f.label} (${counts[f.key] ?? 0})`,
-  }));
 
   const quickSuggestions = useMemo(() => {
     return [...filtered]
@@ -185,7 +205,7 @@ export default function HomeScreen() {
 
   const onAdd = async (recipe) => {
     if (!user) {
-      notify('Connexion requise', 'Connectez-vous pour ajouter une recette.');
+      navigation.navigate('SignIn');
       return;
     }
     setAddingId(recipe.id);
@@ -226,15 +246,29 @@ export default function HomeScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.date}>{formatDateFr(now)}</Text>
             <Text style={styles.hello} numberOfLines={1}>
-              Bonjour, {username}
+              {user ? `Bonjour, ${username}` : 'Bienvenue sur EasyEat'}
             </Text>
           </View>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
+          {user ? (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => navigation.navigate('SignIn')}
+              style={({ pressed }) => [
+                styles.signInBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.signInBtnText}>Se connecter</Text>
+            </Pressable>
+          )}
         </View>
         <Text style={styles.subtitle}>
-          Que cuisinons-nous aujourd'hui ?
+          {user
+            ? "Que cuisinons-nous aujourd'hui ?"
+            : 'Découvrez notre catalogue de recettes'}
         </Text>
 
         {/* SEARCH */}
@@ -271,19 +305,16 @@ export default function HomeScreen() {
           {filtersWithCount.map((f) => {
             const active = filter === f.key;
             return (
-              <Pressable
+              <PressableScale
                 key={f.key}
                 onPress={() => setFilter(f.key)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressed && { opacity: 0.85 },
-                ]}
+                style={[styles.chip, active && styles.chipActive]}
+                scaleTo={0.92}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {f.label}
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           })}
         </ScrollView>
@@ -301,20 +332,26 @@ export default function HomeScreen() {
             contentContainerStyle={styles.popScrollContent}
             style={styles.popScroll}
           >
-            {filtered.map((r) => (
-              <PopularCard
-                key={r.id}
-                recipe={r}
-                added={addedTitles.has(r.title)}
-                adding={addingId === r.id}
-                onAdd={() => onAdd(r)}
-                onOpen={() => navigation.navigate('RecipeDetail', { recipe: r })}
-              />
+            {filtered.map((r, i) => (
+              <FadeInView key={r.id} delay={Math.min(i * 60, 600)}>
+                <PopularCard
+                  recipe={r}
+                  added={addedTitles.has(r.title)}
+                  adding={addingId === r.id}
+                  canInteract={!!user}
+                  showAddButton={!!user}
+                  onAdd={() => onAdd(r)}
+                  onOpen={() =>
+                    navigation.navigate('RecipeDetail', { recipe: r })
+                  }
+                />
+              </FadeInView>
             ))}
           </ScrollView>
         )}
 
         {/* QUICK SUGGESTIONS */}
+        {user && (
         <View style={styles.quickHeader}>
           <Text style={[styles.sectionH, { marginHorizontal: 0, marginTop: 0, marginBottom: 0 }]}>
             Suggestions rapides
@@ -329,17 +366,40 @@ export default function HomeScreen() {
             <Text style={styles.seeAll}>Voir tout</Text>
           </Pressable>
         </View>
-        {loading ? null : quickSuggestions.length === 0 ? (
-          <Text style={styles.emptyText}>Pas encore de suggestions.</Text>
-        ) : (
-          <View style={styles.quickList}>
-            {quickSuggestions.map((r) => (
-              <QuickRow
-                key={r.id}
-                recipe={r}
-                onOpen={() => navigation.navigate('RecipeDetail', { recipe: r })}
-              />
-            ))}
+        )}
+        {user &&
+          (loading ? null : quickSuggestions.length === 0 ? (
+            <Text style={styles.emptyText}>Pas encore de suggestions.</Text>
+          ) : (
+            <View style={styles.quickList}>
+              {quickSuggestions.map((r, i) => (
+                <FadeInView key={r.id} delay={i * 80}>
+                  <QuickRow
+                    recipe={r}
+                    canInteract={!!user}
+                    onOpen={() =>
+                      navigation.navigate('RecipeDetail', { recipe: r })
+                    }
+                  />
+                </FadeInView>
+              ))}
+            </View>
+          ))}
+
+        {!user && (
+          <View style={styles.ctaBanner}>
+            <Text style={styles.ctaText}>
+              Connectez-vous pour découvrir toutes nos recettes
+            </Text>
+            <Pressable
+              onPress={() => navigation.navigate('SignIn')}
+              style={({ pressed }) => [
+                styles.ctaBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.ctaBtnText}>Se connecter</Text>
+            </Pressable>
           </View>
         )}
       </WebScroll>
@@ -384,6 +444,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  signInBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signInBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  ctaBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E8E0',
+    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  ctaText: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  ctaBtn: {
+    minHeight: 44,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   subtitle: {
     fontSize: 14,
     color: '#888',

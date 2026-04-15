@@ -15,6 +15,7 @@ import RecipePreview from '../components/RecipePreview';
 import StepsList from '../components/StepsList';
 import IngredientsList from '../components/IngredientsList';
 import RecipeEmoji from '../components/RecipeEmoji';
+import { formatDuration } from '../lib/formatDuration';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { adjustRecipeServings } from '../lib/ai';
@@ -124,6 +125,7 @@ export default function RecipeDetailScreen({ route, navigation }) {
   const [savingAdj, setSavingAdj] = useState(false);
 
   const isOwner = !!user && recipe?.user_id === user.id;
+  const canManage = isOwner && !recipe?.featured;
 
   // Met à jour la recette locale si on revient depuis Edit avec une version modifiée
   useEffect(() => {
@@ -216,7 +218,7 @@ export default function RecipeDetailScreen({ route, navigation }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () =>
-        isOwner ? (
+        canManage ? (
           <HeaderActions
             onEdit={onEdit}
             onDelete={onDelete}
@@ -224,7 +226,7 @@ export default function RecipeDetailScreen({ route, navigation }) {
           />
         ) : null,
     });
-  }, [navigation, isOwner, deleting, recipe?.id]);
+  }, [navigation, canManage, deleting, recipe?.id]);
 
   if (!recipe) {
     return (
@@ -247,7 +249,7 @@ export default function RecipeDetailScreen({ route, navigation }) {
       <View style={styles.pills}>
         <InfoPill
           label="Durée"
-          value={recipe.duration ? `${recipe.duration} min` : null}
+          value={recipe.duration ? formatDuration(recipe.duration) : null}
         />
         <InfoPill
           label="Personnes"
@@ -394,22 +396,23 @@ const styles = StyleSheet.create({
   },
   pillLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#888',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 4,
+    lineHeight: 14,
   },
   pillValue: {
     fontSize: 15,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginTop: 2,
   },
   section: { marginTop: spacing.xl },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.primary,
     marginBottom: spacing.sm,
   },
   body: {

@@ -59,25 +59,32 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const signUp = async (email, password, username) => {
+  const signUp = async (email, password, username, extra = {}) => {
     const cleanEmail = email.trim().toLowerCase();
+    const finalUsername = username?.trim() || cleanEmail.split('@')[0];
+    const meta = {
+      username: finalUsername,
+      first_name: extra.firstName || null,
+      last_name: extra.lastName || null,
+      age: extra.age != null ? String(extra.age) : null,
+    };
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
-      options: {
-        data: { username: username?.trim() || cleanEmail.split('@')[0] },
-      },
+      options: { data: meta },
     });
     if (error) return { data, error };
 
-    // Fallback: crée le profil côté client si pas de trigger SQL en place.
-    // Avec confirmation email activée, session sera null — on skip.
+    // Fallback client-side si pas de trigger
     if (data?.user && data?.session) {
       const { error: profileError } = await supabase.from('profiles').upsert(
         {
           id: data.user.id,
-          username: username?.trim() || cleanEmail.split('@')[0],
+          username: finalUsername,
           email: cleanEmail,
+          first_name: extra.firstName || null,
+          last_name: extra.lastName || null,
+          age: extra.age || null,
         },
         { onConflict: 'id' }
       );
@@ -88,10 +95,17 @@ export function AuthProvider({ children }) {
 
   const signOut = () => supabase.auth.signOut();
 
+  const role = profile?.role ?? 'member';
+  const isAdmin = role === 'admin';
+  const isEditor = role === 'editor' || role === 'admin';
+
   const value = {
     session,
     user: session?.user ?? null,
     profile,
+    role,
+    isAdmin,
+    isEditor,
     loading,
     signIn,
     signUp,

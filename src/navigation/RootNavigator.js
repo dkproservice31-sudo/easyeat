@@ -23,6 +23,8 @@ import EditRecipeScreen from '../screens/EditRecipeScreen';
 import FridgeScreen from '../screens/FridgeScreen';
 import ShoppingScreen from '../screens/ShoppingScreen';
 import AIScreen from '../screens/AIScreen';
+import AdminScreen from '../screens/AdminScreen';
+import AdminEditFeaturedScreen from '../screens/AdminEditFeaturedScreen';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors, radius, spacing } from '../theme/theme';
@@ -131,13 +133,21 @@ function MainTabs() {
 
 function AppStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        animationDuration: 250,
+      }}
+    >
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen
         name="AddRecipe"
         component={AddRecipeScreen}
         options={{
           presentation: 'modal',
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
           headerShown: true,
           title: 'Nouvelle recette',
           headerStyle: { backgroundColor: colors.background },
@@ -161,8 +171,36 @@ function AppStack() {
         component={EditRecipeScreen}
         options={{
           presentation: 'modal',
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
           headerShown: true,
           title: 'Modifier',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
+        }}
+      />
+      <Stack.Screen
+        name="Admin"
+        component={AdminScreen}
+        options={{
+          headerShown: true,
+          title: 'Panneau Admin',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="AdminEditFeatured"
+        component={AdminEditFeaturedScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
+          headerShown: true,
+          title: 'Recette du catalogue',
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.primary,
           headerTitleStyle: { fontWeight: '700', color: colors.text },
@@ -172,11 +210,56 @@ function AppStack() {
   );
 }
 
-function AuthStack() {
+// Navigation visiteur : accueil + auth + détail recette featured
+function PublicStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="SignIn" component={SignInScreen} />
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        animationDuration: 250,
+      }}
+    >
+      <Stack.Screen name="PublicHome" component={HomeScreen} />
+      <Stack.Screen
+        name="RecipeDetail"
+        component={RecipeDetailScreen}
+        options={{
+          headerShown: true,
+          title: '',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="SignIn"
+        component={SignInScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
+          headerShown: true,
+          title: 'Connexion',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
+        }}
+      />
+      <Stack.Screen
+        name="SignUp"
+        component={SignUpScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
+          headerShown: true,
+          title: 'Inscription',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
+        }}
+      />
     </Stack.Navigator>
   );
 }
@@ -194,7 +277,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer>
-      {session ? <AppStack /> : <AuthStack />}
+      {session ? <AppStack /> : <PublicStack />}
     </NavigationContainer>
   );
 }

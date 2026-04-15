@@ -15,6 +15,25 @@ export function getRecipeEmoji(title) {
   if (/(sole|vitello|tonnato|scaloppine|saltimbocca|osso\s*buco)/.test(t))
     return '🍽️';
   if (/(paella)/.test(t)) return '🥘';
+
+  // === Cuisines du monde (arménienne, turque, moyen-orient…) ===
+  if (/(dolma|tolma|sarma)/.test(t)) return '🍇';
+  if (/(kebab|kebap|khorovats|brochette|chich|yakitori)/.test(t)) return '🍢';
+  if (/(ghapama|citrouille|potiron|pumpkin)/.test(t)) return '🎃';
+  if (/(baklava|paklava|gata|pakhlava)/.test(t)) return '🍰';
+  if (/(manti|khinkali|pelmeni|shushbarak|byorek|b[oö]rek|bourek)/.test(t))
+    return '🥟';
+  if (/(lahmajoun|lahmacun)/.test(t)) return '🫓';
+  if (/(jingyalov|jingalov)/.test(t)) return '🥬';
+  if (/(lavash|pita|\bbread\b|naan)/.test(t)) return '🥖';
+  if (/(pilaf|pilav|plov)/.test(t)) return '🍚';
+  if (/(sini)/.test(t)) return '🍖';
+  if (/(kofta|kofte)/.test(t)) return '🍖';
+  if (/(harissa|khash|khashlama|rago[ûu]t|anushabur|fasulya|haricot)/.test(t))
+    return '🍲';
+  if (/(\bspas\b|soup\b)/.test(t)) return '🍲';
+  if (/\bsalad\b/.test(t)) return '🥗';
+
   if (/(caprese|insalata)/.test(t)) return '🥗';
   if (/(gazpacho|salmorejo|ensaladilla|salade|ni[çc]oise)/.test(t)) return '🥗';
   if (/(tortilla espa|tortilla)/.test(t)) return '🍳';

@@ -1,19 +1,57 @@
-import React from 'react';
-import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { colors, radius, spacing, touch } from '../theme/theme';
+import React, { useRef } from 'react';
+import {
+  Animated,
+  Pressable,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { colors, spacing } from '../theme/theme';
 
-export default function Button({ title, onPress, variant = 'primary', loading, disabled, style }) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+export default function Button({
+  title,
+  onPress,
+  variant = 'primary',
+  loading,
+  disabled,
+  style,
+}) {
   const isGhost = variant === 'ghost';
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handleIn = () => {
+    if (disabled || loading) return;
+    Animated.spring(scale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 160,
+    }).start();
+  };
+
+  const handleOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 140,
+    }).start();
+  };
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
+      onPressIn={handleIn}
+      onPressOut={handleOut}
       disabled={disabled || loading}
-      style={({ pressed }) => [
+      style={[
         styles.base,
         isGhost ? styles.ghost : styles.primary,
-        pressed && !disabled && styles.pressed,
         (disabled || loading) && styles.disabled,
         style,
+        { transform: [{ scale }] },
       ]}
     >
       {loading ? (
@@ -21,7 +59,7 @@ export default function Button({ title, onPress, variant = 'primary', loading, d
       ) : (
         <Text style={[styles.text, isGhost && styles.textGhost]}>{title}</Text>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -40,7 +78,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#F0E8E0',
   },
-  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.5 },
   text: { color: '#fff', fontSize: 16, fontWeight: '700' },
   textGhost: { color: colors.primary },

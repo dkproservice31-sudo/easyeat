@@ -85,9 +85,9 @@ const styles = StyleSheet.create({
   chip: {
     flexShrink: 1,
     maxWidth: '100%',
-    backgroundColor: '#FFF8F0',
-    borderColor: '#F0E8E0',
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: '#FFF0E8',
+    borderColor: '#FF6B35',
+    borderWidth: 1.5,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#333',
   },
   dot: {
     position: 'absolute',

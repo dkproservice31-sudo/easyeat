@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Text, View, StyleSheet, Pressable } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Screen from '../components/Screen';
+import FadeInView from '../components/FadeInView';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { colors, spacing } from '../theme/theme';
@@ -17,7 +18,8 @@ function StatCard({ emoji, value, label }) {
 }
 
 export default function ProfileScreen() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isAdmin, isEditor } = useAuth();
+  const navigation = useNavigation();
   const [stats, setStats] = useState({ recipes: 0, fridge: 0, ai: 0 });
 
   const username =
@@ -60,20 +62,43 @@ export default function ProfileScreen() {
     <Screen>
       <View style={styles.container}>
         {/* Header avatar */}
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
+        <FadeInView delay={0}>
+          <View style={styles.header}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+            <Text style={styles.name}>{username}</Text>
+            {user?.email ? (
+              <Text style={styles.email}>{user.email}</Text>
+            ) : null}
           </View>
-          <Text style={styles.name}>{username}</Text>
-          {user?.email ? <Text style={styles.email}>{user.email}</Text> : null}
-        </View>
+        </FadeInView>
 
         {/* Stats */}
-        <View style={styles.statsRow}>
-          <StatCard emoji="📖" value={stats.recipes} label="Recettes" />
-          <StatCard emoji="❄️" value={stats.fridge} label="Frigo" />
-          <StatCard emoji="✨" value={stats.ai} label="IA" />
-        </View>
+        <FadeInView delay={120}>
+          <View style={styles.statsRow}>
+            <StatCard emoji="📖" value={stats.recipes} label="Recettes" />
+            <StatCard emoji="❄️" value={stats.fridge} label="Frigo" />
+            <StatCard emoji="✨" value={stats.ai} label="IA" />
+          </View>
+        </FadeInView>
+
+        {isEditor && (
+          <FadeInView delay={240}>
+            <Pressable
+              onPress={() => navigation.navigate('Admin')}
+              style={({ pressed }) => [
+                styles.adminBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityLabel={isAdmin ? 'Panneau Admin' : 'Panneau Éditeur'}
+            >
+              <Text style={styles.adminBtnText}>
+                🔧 {isAdmin ? 'Panneau Admin' : 'Panneau Éditeur'}
+              </Text>
+            </Pressable>
+          </FadeInView>
+        )}
 
         <View style={{ flex: 1 }} />
 
@@ -154,6 +179,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
+
+  adminBtn: {
+    marginTop: 24,
+    minHeight: 50,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   // Sign out
   signOutBtn: {
