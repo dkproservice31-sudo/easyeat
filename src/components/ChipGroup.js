@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native';
-import { colors, radius, spacing, touch } from '../theme/theme';
+import { radius, spacing, touch } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
-function Chip({ label, selected, onPress, onDelete, disabled }) {
+function Chip({ label, selected, onPress, onDelete, disabled, styles }) {
   return (
     <View style={styles.chipWrap}>
       <Pressable
@@ -50,6 +51,8 @@ export default function ChipGroup({
   onDeleteCustom,
   disabled,
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -82,6 +85,7 @@ export default function ChipGroup({
             selected={value === opt}
             onPress={() => onChange(value === opt ? '' : opt)}
             disabled={disabled}
+            styles={styles}
           />
         ))}
         {customs.map((c) => (
@@ -92,6 +96,7 @@ export default function ChipGroup({
             onPress={() => onChange(value === c.value ? '' : c.value)}
             onDelete={() => onDeleteCustom?.(c)}
             disabled={disabled}
+            styles={styles}
           />
         ))}
         <Pressable
@@ -115,7 +120,7 @@ export default function ChipGroup({
             value={draft}
             onChangeText={setDraft}
             placeholder="Votre option..."
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={colors.textSecondary}
             style={styles.input}
             autoFocus
             maxLength={40}
@@ -153,7 +158,7 @@ export default function ChipGroup({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -181,7 +186,7 @@ const styles = StyleSheet.create({
   chipPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   chipDisabled: { opacity: 0.5 },
   text: { fontSize: 14, fontWeight: '600', color: colors.text },
-  textSelected: { color: '#fff' },
+  textSelected: { color: colors.surface },
   deleteBtn: {
     position: 'absolute',
     right: -4,
@@ -189,14 +194,14 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: colors.error,
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.background,
   },
   deleteText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 14,
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   addBtnText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 24,
     fontWeight: '600',
     lineHeight: 26,
@@ -247,7 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  confirmText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  confirmText: { color: colors.surface, fontWeight: '600', fontSize: 15 },
   cancelBtn: {
     width: touch.minHeight,
     height: touch.minHeight,
@@ -258,5 +263,5 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  cancelText: { color: colors.textMuted, fontSize: 18 },
+  cancelText: { color: colors.textSecondary, fontSize: 18 },
 });

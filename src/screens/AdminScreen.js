@@ -19,7 +19,8 @@ import { supabase } from '../lib/supabase';
 import { generateRecipesBatch } from '../lib/ai';
 import { formatDateFr } from '../lib/dateFr';
 import { formatDuration } from '../lib/formatDuration';
-import { colors, maxContentWidth, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { maxContentWidth, spacing } from '../theme/theme';
 
 const BASE_CUISINES = ['française', 'italienne', 'espagnole'];
 
@@ -47,6 +48,8 @@ function confirmDialog(title, message) {
 export default function AdminScreen() {
   const { user, isAdmin, isEditor, loading: authLoading } = useAuth();
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [recipes, setRecipes] = useState([]);
   const [members, setMembers] = useState([]);
@@ -409,7 +412,7 @@ export default function AdminScreen() {
                 value={newCuisine}
                 onChangeText={setNewCuisine}
                 placeholder="nom du pays"
-                placeholderTextColor="#A9A49C"
+                placeholderTextColor={colors.textHint}
                 style={styles.addCuisineInput}
                 autoFocus
                 onSubmitEditing={onAddCuisine}
@@ -491,7 +494,7 @@ export default function AdminScreen() {
               editable={!generating}
               style={styles.genInput}
               placeholder="10"
-              placeholderTextColor="#A9A49C"
+              placeholderTextColor={colors.textHint}
             />
             {generating && (
               <View style={styles.progress}>
@@ -574,7 +577,7 @@ export default function AdminScreen() {
                   }
                   style={({ pressed }) => [
                     styles.iconBtn,
-                    { backgroundColor: '#FFF0E8' },
+                    { backgroundColor: colors.primaryLight },
                     pressed && { opacity: 0.75 },
                   ]}
                   accessibilityLabel="Modifier"
@@ -587,12 +590,12 @@ export default function AdminScreen() {
                   onPress={() => onDeleteRecipe(r)}
                   style={({ pressed }) => [
                     styles.iconBtn,
-                    { backgroundColor: '#FDECEE' },
+                    { backgroundColor: colors.dangerLight },
                     pressed && { opacity: 0.75 },
                   ]}
                   accessibilityLabel="Supprimer"
                 >
-                  <Text style={[styles.iconBtnText, { color: '#e74c3c' }]}>
+                  <Text style={[styles.iconBtnText, { color: colors.danger }]}>
                     ×
                   </Text>
                 </Pressable>
@@ -616,7 +619,7 @@ export default function AdminScreen() {
                 value={memberQuery}
                 onChangeText={setMemberQuery}
                 placeholder="Rechercher un membre..."
-                placeholderTextColor="#A9A49C"
+                placeholderTextColor={colors.textHint}
                 style={styles.searchInput}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -714,7 +717,7 @@ export default function AdminScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scrollContent: {
     paddingHorizontal: 16,
@@ -732,13 +735,13 @@ const styles = StyleSheet.create({
   h1: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 10,
   },
 
@@ -749,10 +752,10 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -765,7 +768,7 @@ const styles = StyleSheet.create({
   tabBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#888',
+    color: colors.textSecondary,
   },
   tabBtnTextActive: { color: colors.primary },
 
@@ -780,9 +783,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 16,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -790,8 +793,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  chipText: { fontSize: 13, color: '#666', fontWeight: '700' },
-  chipTextActive: { color: '#fff' },
+  chipText: { fontSize: 13, color: colors.textSecondary, fontWeight: '700' },
+  chipTextActive: { color: colors.surface },
   addChip: { borderStyle: 'dashed', borderColor: colors.primary },
   addCuisineRow: {
     flexDirection: 'row',
@@ -802,11 +805,11 @@ const styles = StyleSheet.create({
     minHeight: 36,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     paddingHorizontal: 14,
     fontSize: 14,
-    color: '#1A1A1A',
+    color: colors.text,
     minWidth: 140,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
@@ -818,18 +821,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addCuisineBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  addCuisineBtnText: { color: colors.surface, fontSize: 12, fontWeight: '700' },
   addCuisineCancel: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F0E8E0',
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addCuisineCancelText: {
     fontSize: 18,
-    color: '#888',
+    color: colors.textSecondary,
     fontWeight: '700',
     lineHeight: 20,
     marginTop: -2,
@@ -846,7 +849,7 @@ const styles = StyleSheet.create({
   countryCount: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   smallBtn: {
     backgroundColor: colors.primary,
@@ -854,7 +857,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  smallBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  smallBtnText: { color: colors.surface, fontSize: 13, fontWeight: '700' },
 
   // Generate AI
   generateBtn: {
@@ -866,36 +869,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     minHeight: 50,
   },
-  generateBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  generateBtnText: { color: colors.surface, fontSize: 15, fontWeight: '700' },
   generateBox: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 16,
     marginBottom: 16,
   },
   generateTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 8,
   },
   genLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 6,
   },
   genInput: {
     minHeight: 44,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 16,
-    color: '#1A1A1A',
+    color: colors.text,
     maxWidth: 140,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
@@ -916,18 +919,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  genSubmitText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  genSubmitText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
   genCancelBtn: {
     flex: 1,
     minHeight: 44,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  genCancelText: { color: '#666', fontSize: 14, fontWeight: '700' },
+  genCancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
 
   // Search
   searchWrap: {
@@ -936,17 +939,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     marginBottom: 12,
   },
   searchIcon: { fontSize: 14 },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1A1A1A',
+    color: colors.text,
     paddingVertical: 10,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
@@ -956,15 +959,15 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 12,
     gap: 6,
   },
-  rowTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
-  rowMeta: { fontSize: 12, color: '#888', marginTop: 2 },
+  rowTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  rowMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   iconBtn: {
     width: 34,
     height: 34,
@@ -983,20 +986,20 @@ const styles = StyleSheet.create({
 
   // Member card
   memberCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 14,
   },
   memberName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   memberInfo: {
     fontSize: 12,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   memberMetaRow: {
@@ -1005,7 +1008,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 6,
   },
-  memberMeta: { fontSize: 12, color: '#888' },
+  memberMeta: { fontSize: 12, color: colors.textSecondary },
   memberHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1016,13 +1019,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
-    backgroundColor: '#EEE',
+    backgroundColor: colors.border,
   },
-  roleBadgeEditor: { backgroundColor: '#FFF0E8' },
+  roleBadgeEditor: { backgroundColor: colors.primaryLight },
   roleBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#666',
+    color: colors.textSecondary,
   },
   roleBadgeTextEditor: { color: colors.primary },
   roleBtn: {
@@ -1033,15 +1036,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  roleBtnPromote: { backgroundColor: '#FFF0E8' },
+  roleBtnPromote: { backgroundColor: colors.primaryLight },
   roleBtnPromoteText: {
     color: colors.primary,
     fontSize: 13,
     fontWeight: '700',
   },
-  roleBtnDemote: { backgroundColor: '#FFEBEE' },
+  roleBtnDemote: { backgroundColor: colors.dangerLight },
   roleBtnDemoteText: {
-    color: '#e74c3c',
+    color: colors.danger,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1049,10 +1052,10 @@ const styles = StyleSheet.create({
   empty: {
     padding: 20,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
   },
-  emptyText: { fontSize: 14, color: '#888' },
+  emptyText: { fontSize: 14, color: colors.textSecondary },
 });

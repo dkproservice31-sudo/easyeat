@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState, useEffect } from 'react';
+import React, { useLayoutEffect, useMemo, useState, useEffect } from 'react';
 import {
   Text,
   View,
@@ -15,11 +15,13 @@ import RecipePreview from '../components/RecipePreview';
 import StepsList from '../components/StepsList';
 import IngredientsList from '../components/IngredientsList';
 import RecipeEmoji from '../components/RecipeEmoji';
+import FadeInView from '../components/FadeInView';
 import { formatDuration } from '../lib/formatDuration';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { adjustRecipeServings } from '../lib/ai';
-import { colors, radius, spacing, typography } from '../theme/theme';
+import { adjustRecipeServings, calculateRecipeMacros } from '../lib/ai';
+import { radius, spacing } from '../theme/theme';
 
 // Retire les mentions de portions d'un titre :
 //   "(pour 2 personnes)", "(2 pers.)", "(pour 4 pers.)", "pour 2 personnes",
@@ -58,7 +60,7 @@ function notify(title, message) {
   else Alert.alert(title, message);
 }
 
-function InfoPill({ label, value }) {
+function InfoPill({ label, value, styles }) {
   if (!value) return null;
   return (
     <View style={styles.pill}>
@@ -68,7 +70,7 @@ function InfoPill({ label, value }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, styles }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -77,7 +79,7 @@ function Section({ title, children }) {
   );
 }
 
-function HeaderActions({ onEdit, onDelete, busy }) {
+function HeaderActions({ onEdit, onDelete, busy, styles, colors }) {
   return (
     <View style={styles.headerActions}>
       <Pressable
@@ -85,7 +87,7 @@ function HeaderActions({ onEdit, onDelete, busy }) {
         disabled={busy}
         style={({ pressed }) => [
           styles.iconBtn,
-          { backgroundColor: '#FFF1E8' },
+          { backgroundColor: colors.primaryLight },
           pressed && styles.iconBtnPressed,
           busy && { opacity: 0.5 },
         ]}
@@ -99,14 +101,14 @@ function HeaderActions({ onEdit, onDelete, busy }) {
         disabled={busy}
         style={({ pressed }) => [
           styles.iconBtn,
-          { backgroundColor: '#FDECEE' },
+          { backgroundColor: colors.dangerLight },
           pressed && styles.iconBtnPressed,
           busy && { opacity: 0.5 },
         ]}
         accessibilityLabel="Supprimer la recette"
         hitSlop={6}
       >
-        <Text style={[styles.iconText, { color: colors.error }]}>🗑</Text>
+        <Text style={[styles.iconText, { color: colors.danger }]}>🗑</Text>
       </Pressable>
     </View>
   );
@@ -114,8 +116,27 @@ function HeaderActions({ onEdit, onDelete, busy }) {
 
 export default function RecipeDetailScreen({ route, navigation }) {
   const { user } = useAuth();
+  const { colors, typography } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [recipe, setRecipe] = useState(route.params?.recipe ?? null);
   const [deleting, setDeleting] = useState(false);
+
+  // Macronutriments
+  const [macros, setMacros] = useState(null);
+  const [macrosLoading, setMacrosLoading] = useState(false);
+
+  const onComputeMacros = async () => {
+    setMacrosLoading(true);
+    setMacros(null);
+    try {
+      const res = await calculateRecipeMacros(recipe);
+      setMacros(res);
+    } catch (err) {
+      notify('Calcul impossible', err.message || 'Erreur');
+    } finally {
+      setMacrosLoading(false);
+    }
+  };
 
   // Adapter les portions
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -223,10 +244,12 @@ export default function RecipeDetailScreen({ route, navigation }) {
             onEdit={onEdit}
             onDelete={onDelete}
             busy={deleting}
+            styles={styles}
+            colors={colors}
           />
         ) : null,
     });
-  }, [navigation, canManage, deleting, recipe?.id]);
+  }, [navigation, canManage, deleting, recipe?.id, styles, colors]);
 
   if (!recipe) {
     return (
@@ -250,27 +273,104 @@ export default function RecipeDetailScreen({ route, navigation }) {
         <InfoPill
           label="Durée"
           value={recipe.duration ? formatDuration(recipe.duration) : null}
+          styles={styles}
         />
         <InfoPill
           label="Personnes"
           value={recipe.servings ? `${recipe.servings}` : null}
+          styles={styles}
         />
         <InfoPill
           label="Température"
           value={recipe.cooking_temp ? `${recipe.cooking_temp}°C` : null}
+          styles={styles}
         />
-        <InfoPill label="Cuisson" value={recipe.cooking_type} />
-        <InfoPill label="Matière grasse" value={recipe.fat_type} />
+        <InfoPill label="Cuisson" value={recipe.cooking_type} styles={styles} />
+        <InfoPill label="Matière grasse" value={recipe.fat_type} styles={styles} />
       </View>
 
       {recipe.ingredients ? (
-        <Section title="Ingrédients">
+        <Section title="Ingrédients" styles={styles}>
           <IngredientsList ingredients={recipe.ingredients} />
         </Section>
       ) : null}
 
+      {recipe.ingredients ? (
+        <View style={styles.macrosWrap}>
+          <Pressable
+            onPress={onComputeMacros}
+            disabled={macrosLoading}
+            style={({ pressed }) => [
+              styles.macrosBtn,
+              pressed && { opacity: 0.85 },
+              macrosLoading && { opacity: 0.6 },
+            ]}
+          >
+            {macrosLoading ? (
+              <View style={styles.macrosBtnInner}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={styles.macrosBtnText}>Calcul en cours...</Text>
+              </View>
+            ) : (
+              <Text style={styles.macrosBtnText}>
+                📊 Voir les macronutriments
+              </Text>
+            )}
+          </Pressable>
+
+          {macros && !macrosLoading ? (
+            <FadeInView>
+              <View style={styles.macrosCard}>
+                <Text style={styles.macrosTitle}>Macronutriments</Text>
+                <Text style={styles.macrosSubtitle}>
+                  Par portion (pour {macros.portions || recipe.servings || 1} pers.)
+                </Text>
+                <View style={styles.macrosGrid}>
+                  <View style={[styles.macroBadge, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.macroBadgeValue, { color: colors.primary }]}>
+                      🔥 {Math.round(macros?.par_portion?.calories ?? 0)} kcal
+                    </Text>
+                    <Text style={styles.macroBadgeLabel}>Calories</Text>
+                  </View>
+                  <View style={[styles.macroBadge, { backgroundColor: colors.successLight }]}>
+                    <Text style={[styles.macroBadgeValue, { color: colors.success }]}>
+                      🥩 {Math.round(macros?.par_portion?.proteines ?? 0)} g
+                    </Text>
+                    <Text style={styles.macroBadgeLabel}>Protéines</Text>
+                  </View>
+                  <View style={[styles.macroBadge, { backgroundColor: colors.warningLight }]}>
+                    <Text style={[styles.macroBadgeValue, { color: colors.warning }]}>
+                      🍞 {Math.round(macros?.par_portion?.glucides ?? 0)} g
+                    </Text>
+                    <Text style={styles.macroBadgeLabel}>Glucides</Text>
+                  </View>
+                  <View style={[styles.macroBadge, { backgroundColor: colors.dangerLight }]}>
+                    <Text style={[styles.macroBadgeValue, { color: colors.dangerText }]}>
+                      🧈 {Math.round(macros?.par_portion?.lipides ?? 0)} g
+                    </Text>
+                    <Text style={styles.macroBadgeLabel}>Lipides</Text>
+                  </View>
+                </View>
+                <Text style={styles.macrosTotal}>
+                  Total recette : {Math.round(macros?.total?.calories ?? 0)} kcal
+                </Text>
+                <Pressable
+                  onPress={() => setMacros(null)}
+                  style={({ pressed }) => [
+                    styles.macrosClose,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.macrosCloseText}>Fermer</Text>
+                </Pressable>
+              </View>
+            </FadeInView>
+          ) : null}
+        </View>
+      ) : null}
+
       {recipe.steps ? (
-        <Section title="Étapes">
+        <Section title="Étapes" styles={styles}>
           <StepsList steps={recipe.steps} />
         </Section>
       ) : null}
@@ -359,7 +459,7 @@ export default function RecipeDetailScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   heroEmojiWrap: {
     alignItems: 'center',
     marginTop: spacing.sm,
@@ -373,7 +473,7 @@ const styles = StyleSheet.create({
   },
   description: {
     marginTop: spacing.sm,
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -386,9 +486,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pill: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -397,7 +497,7 @@ const styles = StyleSheet.create({
   pillLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#888',
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -406,7 +506,7 @@ const styles = StyleSheet.create({
   pillValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   section: { marginTop: spacing.xl },
   sectionTitle: {
@@ -450,5 +550,87 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
     marginBottom: spacing.sm,
+  },
+
+  macrosWrap: { marginTop: spacing.lg },
+  macrosBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  macrosBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  macrosBtnText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  macrosCard: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
+  },
+  macrosTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  macrosSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+    marginBottom: spacing.sm,
+  },
+  macrosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  macroBadge: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  macroBadgeValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  macroBadgeLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  macrosTotal: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  macrosClose: {
+    marginTop: spacing.sm,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  macrosCloseText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '700',
   },
 });

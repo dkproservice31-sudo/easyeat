@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Text,
   View,
@@ -22,12 +22,12 @@ import {
   findInFridge,
 } from '../lib/ingredients';
 import RecipeEmoji from '../components/RecipeEmoji';
+import { useTheme } from '../contexts/ThemeContext';
 import {
-  colors,
   radius,
   spacing,
-  typography,
   maxContentWidth,
+  makeTypography,
 } from '../theme/theme';
 
 function notify(title, message) {
@@ -47,7 +47,7 @@ function confirmDialog(title, message) {
   });
 }
 
-function ShoppingItemRow({ item, checked, onToggle }) {
+function ShoppingItemRow({ item, checked, onToggle, styles }) {
   return (
     <Pressable
       onPress={() => onToggle(item.id)}
@@ -73,7 +73,7 @@ function ShoppingItemRow({ item, checked, onToggle }) {
 }
 
 // Carte d'une recette avec statut de chaque ingrédient vis-à-vis du frigo
-function RecipeCard({ recipe, fridge, onAddAll, adding }) {
+function RecipeCard({ recipe, fridge, onAddAll, adding, styles, typography }) {
   const lines = parseIngredients(recipe.ingredients);
   const items = lines.map((raw) => {
     const clean = cleanIngredientName(raw) || raw;
@@ -139,7 +139,7 @@ function RecipeCard({ recipe, fridge, onAddAll, adding }) {
   );
 }
 
-function FinishModal({ visible, onClose, onOk, onSave, busy }) {
+function FinishModal({ visible, onClose, onOk, onSave, busy, styles, colors, typography }) {
   return (
     <Modal
       visible={visible}
@@ -203,7 +203,7 @@ function FinishModal({ visible, onClose, onOk, onSave, busy }) {
   );
 }
 
-function HistoryCard({ entry, onDelete }) {
+function HistoryCard({ entry, onDelete, styles }) {
   const count = Array.isArray(entry.items) ? entry.items.length : 0;
   return (
     <View style={styles.historyCard}>
@@ -243,6 +243,9 @@ function HistoryCard({ entry, onDelete }) {
 
 export default function ShoppingScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const typography = useMemo(() => makeTypography(colors), [colors]);
   const [fridge, setFridge] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [history, setHistory] = useState([]);
@@ -507,6 +510,7 @@ export default function ShoppingScreen() {
                   item={item}
                   checked={checked.has(item.id)}
                   onToggle={toggle}
+                  styles={styles}
                 />
               ))}
             </View>
@@ -531,6 +535,8 @@ export default function ShoppingScreen() {
                   fridge={fridge}
                   onAddAll={addAllFromRecipe}
                   adding={addingRecipeId === r.id}
+                  styles={styles}
+                  typography={typography}
                 />
               ))}
             </View>
@@ -541,7 +547,7 @@ export default function ShoppingScreen() {
             <View style={styles.historyWrap}>
               <Text style={styles.historyTitle}>Historique des courses</Text>
               {history.map((h) => (
-                <HistoryCard key={h.id} entry={h} onDelete={deleteHistory} />
+                <HistoryCard key={h.id} entry={h} onDelete={deleteHistory} styles={styles} />
               ))}
             </View>
           )}
@@ -574,12 +580,15 @@ export default function ShoppingScreen() {
         onOk={() => completePurchase(false)}
         onSave={() => completePurchase(true)}
         busy={busy}
+        styles={styles}
+        colors={colors}
+        typography={typography}
       />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     paddingHorizontal: 16,
@@ -594,7 +603,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   scroll: { flex: 1 },
   scrollContent: {
@@ -609,7 +618,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 6,
   },
   sectionHeaderRow: {
@@ -625,7 +634,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: '#FFF0E8',
+    backgroundColor: colors.primaryLight,
   },
   toggleAllText: {
     color: colors.primary,
@@ -637,7 +646,7 @@ const styles = StyleSheet.create({
     maxWidth: maxContentWidth,
     alignSelf: 'center',
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     marginBottom: 10,
   },
   empty: {
@@ -646,12 +655,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     padding: spacing.lg,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
   },
-  emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
+  emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
 
   // Ingredient row (shopping list)
   row: {
@@ -660,10 +669,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: spacing.md,
@@ -675,8 +684,8 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#DDDDDD',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -685,7 +694,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   circleCheck: {
-    color: '#FFFFFF',
+    color: colors.surface,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 16,
@@ -695,23 +704,23 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   nameChecked: {
     textDecorationLine: 'line-through',
-    color: '#AAA',
+    color: colors.textHint,
   },
-  qtyText: { fontSize: 13, color: '#888', fontWeight: '600' },
+  qtyText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
 
   // Recipe card
   recipeCard: {
     width: '100%',
     maxWidth: maxContentWidth,
     alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 16,
   },
   recipeTitleRow: {
@@ -723,7 +732,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   ingWrap: {
     flexDirection: 'row',
@@ -742,15 +751,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   ingInStock: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#C8E6C9',
+    backgroundColor: colors.successLight,
+    borderColor: colors.successLight,
   },
   ingMissing: {
-    backgroundColor: '#FFEBEE',
-    borderColor: '#FFCDD2',
+    backgroundColor: colors.dangerLight,
+    borderColor: colors.dangerLight,
   },
-  ingInStockText: { color: '#2E7D32' },
-  ingMissingText: { color: '#C62828' },
+  ingInStockText: { color: colors.success },
+  ingMissingText: { color: colors.dangerText },
   ingText: { fontSize: 12, fontWeight: '600' },
   addAllBtn: {
     marginTop: 12,
@@ -762,7 +771,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  addAllText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  addAllText: { color: colors.surface, fontWeight: '700', fontSize: 14 },
 
   center: {
     flex: 1,
@@ -781,7 +790,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#F0E8E0',
+    borderTopColor: colors.border,
   },
   finishBtn: {
     width: '100%',
@@ -792,7 +801,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  finishBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  finishBtnText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
 
   // Modal
   modalBackdrop: {
@@ -817,8 +826,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  modalBtnCancel: { backgroundColor: '#E0E0E0' },
-  modalBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  modalBtnCancel: { backgroundColor: colors.border },
+  modalBtnText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
 
   // Historique
   historyWrap: {
@@ -855,14 +864,14 @@ const styles = StyleSheet.create({
   historyItems: { marginTop: spacing.sm },
   historyItem: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   historyDeleteBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FDECEE',
+    backgroundColor: colors.dangerLight,
     alignItems: 'center',
     justifyContent: 'center',
   },

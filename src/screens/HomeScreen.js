@@ -17,11 +17,12 @@ import RecipeEmoji from '../components/RecipeEmoji';
 import FadeInView from '../components/FadeInView';
 import PressableScale from '../components/PressableScale';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { formatDateFr } from '../lib/dateFr';
 import { getRecipeEmoji } from '../lib/recipeEmoji';
 import { formatDuration } from '../lib/formatDuration';
-import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
+import { radius, spacing, maxContentWidth } from '../theme/theme';
 
 // Met la première lettre en capitale pour l'affichage
 function capitalize(s) {
@@ -56,6 +57,8 @@ function PopularCard({
   onOpen,
   canInteract = true,
   showAddButton = true,
+  styles,
+  colors,
 }) {
   return (
     <PressableScale
@@ -84,7 +87,7 @@ function PopularCard({
           ]}
         >
           <Text
-            style={[styles.popAddText, added && { color: colors.textMuted }]}
+            style={[styles.popAddText, added && { color: colors.textSecondary }]}
           >
             {added ? 'Ajoutée ✓' : adding ? '...' : 'Ajouter'}
           </Text>
@@ -94,7 +97,7 @@ function PopularCard({
   );
 }
 
-function QuickRow({ recipe, onOpen, canInteract = true }) {
+function QuickRow({ recipe, onOpen, canInteract = true, styles }) {
   return (
     <PressableScale
       onPress={canInteract ? onOpen : undefined}
@@ -119,6 +122,8 @@ function QuickRow({ recipe, onOpen, canInteract = true }) {
 
 export default function HomeScreen() {
   const { user, profile } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
@@ -280,7 +285,7 @@ export default function HomeScreen() {
             value={query}
             onChangeText={setQuery}
             placeholder="Rechercher une recette..."
-            placeholderTextColor="#A9A49C"
+            placeholderTextColor={colors.textHint}
             style={styles.searchInput}
             autoCorrect={false}
             autoCapitalize="none"
@@ -346,6 +351,8 @@ export default function HomeScreen() {
                   onOpen={() =>
                     navigation.navigate('RecipeDetail', { recipe: r })
                   }
+                  styles={styles}
+                  colors={colors}
                 />
               </FadeInView>
             ))}
@@ -382,6 +389,7 @@ export default function HomeScreen() {
                     onOpen={() =>
                       navigation.navigate('RecipeDetail', { recipe: r })
                     }
+                    styles={styles}
                   />
                 </FadeInView>
               ))}
@@ -409,7 +417,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -430,11 +438,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginHorizontal: spacing.md,
   },
-  date: { fontSize: 13, color: '#999' },
+  date: { fontSize: 13, color: colors.textTertiary },
   hello: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginTop: 2,
   },
   avatar: {
@@ -445,7 +453,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  avatarText: { color: colors.surface, fontSize: 18, fontWeight: '700' },
   signInBtn: {
     backgroundColor: colors.primary,
     borderRadius: 20,
@@ -454,12 +462,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  signInBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  signInBtnText: { color: colors.surface, fontSize: 13, fontWeight: '700' },
   ctaBanner: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: 20,
     marginHorizontal: 16,
     marginTop: 24,
@@ -467,7 +475,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontSize: 14,
-    color: '#1A1A1A',
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -479,10 +487,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  ctaBtnText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
   subtitle: {
     fontSize: 14,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
     marginHorizontal: spacing.md,
   },
@@ -496,10 +504,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EEE',
+    borderColor: colors.border,
   },
   searchIcon: { fontSize: 16 },
   searchInput: {
@@ -513,13 +521,13 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#EEE',
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchClearText: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textTertiary,
     lineHeight: 18,
     marginTop: -1,
   },
@@ -536,9 +544,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 16,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EEE',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -546,21 +554,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  chipText: { fontSize: 13, color: '#666', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
+  chipText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
+  chipTextActive: { color: colors.surface },
 
   // Sections
   sectionH: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
     marginHorizontal: spacing.md,
   },
   emptyText: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
     marginHorizontal: spacing.md,
   },
@@ -575,10 +583,10 @@ const styles = StyleSheet.create({
   },
   popCard: {
     width: 150,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     padding: spacing.md,
     minHeight: 200,
     alignItems: 'center',
@@ -588,7 +596,7 @@ const styles = StyleSheet.create({
   popTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     lineHeight: 16,
     textAlign: 'center',
   },
@@ -603,12 +611,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     minHeight: 36,
     width: '100%',
-    backgroundColor: '#FFF0E8',
+    backgroundColor: colors.primaryLight,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  popAddBtnDone: { backgroundColor: '#EFEFEF' },
+  popAddBtnDone: { backgroundColor: colors.border },
   popAddText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
 
   // Quick suggestions
@@ -630,16 +638,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   quickEmoji: {},
-  quickTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' },
-  quickMeta: { fontSize: 12, color: '#888', marginTop: 2 },
+  quickTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  quickMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   chevron: {
     fontSize: 24,
     color: colors.primary,

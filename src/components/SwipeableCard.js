@@ -10,6 +10,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 
 const SWIPE_WIDTH = 80;
 const SWIPE_THRESHOLD = 50;
@@ -49,6 +50,8 @@ export default function SwipeableCard({
   children,
   style,
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
   const translateX = useRef(new Animated.Value(0)).current;
   const fullSwipeLimit = screenWidth * 0.6;
@@ -197,7 +200,7 @@ export default function SwipeableCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   wrap: {
     width: '100%',
     position: 'relative',
@@ -209,11 +212,11 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SWIPE_WIDTH,
-    backgroundColor: '#e74c3c',
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
   },
   deleteIcon: { fontSize: 22 },
-  deleteLabel: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  deleteLabel: { color: colors.surface, fontSize: 11, fontWeight: '700' },
 });

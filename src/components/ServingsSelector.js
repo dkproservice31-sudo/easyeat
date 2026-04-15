@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { colors, spacing, touch } from '../theme/theme';
+import { spacing, touch } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 const PRESETS = ['1', '2', '3', '4', '5', '6', '8', '10', '12'];
 
-// value: string (1-50 comme string). onChange(string).
 export default function ServingsSelector({ value, onChange, disabled }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isPreset = PRESETS.includes(value);
   const [custom, setCustom] = useState(isPreset ? '' : value || '');
 
@@ -69,7 +71,7 @@ export default function ServingsSelector({ value, onChange, disabled }) {
           value={custom}
           onChangeText={onChangeCustom}
           placeholder="ex : 15"
-          placeholderTextColor="#A9A49C"
+          placeholderTextColor={colors.textHint}
           keyboardType="number-pad"
           maxLength={2}
           editable={!disabled}
@@ -81,57 +83,58 @@ export default function ServingsSelector({ value, onChange, disabled }) {
   );
 }
 
-const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  circle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  circleText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  circleTextActive: { color: '#FFFFFF' },
+const createStyles = (colors) =>
+  StyleSheet.create({
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    circle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    circleActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    circleText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    circleTextActive: { color: colors.surface },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  input: {
-    flex: 1,
-    maxWidth: 140,
-    minHeight: touch.minHeight,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    fontSize: 16,
-    color: '#1A1A1A',
-    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
-  },
-  inputInvalid: { borderColor: colors.error },
-  error: { color: colors.error, fontSize: 13, marginTop: spacing.xs },
-});
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    input: {
+      flex: 1,
+      maxWidth: 140,
+      minHeight: touch.minHeight,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      paddingHorizontal: spacing.md,
+      fontSize: 16,
+      color: colors.text,
+      ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
+    },
+    inputInvalid: { borderColor: colors.danger },
+    error: { color: colors.danger, fontSize: 13, marginTop: spacing.xs },
+  });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Text,
   View,
@@ -13,16 +13,17 @@ import Button from '../components/Button';
 import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { generateRecipe } from '../lib/ai';
-import { colors, radius, spacing, touch, typography } from '../theme/theme';
+import { radius, spacing, touch, typography } from '../theme/theme';
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
   else Alert.alert(title, message);
 }
 
-function Checkbox({ checked, onToggle, label, disabled }) {
+function Checkbox({ checked, onToggle, label, disabled, styles }) {
   return (
     <Pressable
       onPress={onToggle}
@@ -44,6 +45,8 @@ function Checkbox({ checked, onToggle, label, disabled }) {
 
 export default function AIScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [servings, setServings] = useState('2');
   const [prompt, setPrompt] = useState('');
   const [useFridge, setUseFridge] = useState(false);
@@ -140,6 +143,7 @@ export default function AIScreen() {
         onToggle={() => setUseFridge((v) => !v)}
         label="Utiliser les ingrédients de mon frigo"
         disabled={generating}
+        styles={styles}
       />
 
       <View style={{ marginTop: spacing.lg }}>
@@ -174,7 +178,7 @@ export default function AIScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: spacing.xl,
@@ -193,12 +197,12 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     textAlign: 'center',
   },
   heroSubtitle: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
   },
@@ -206,7 +210,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: spacing.sm,
   },
   multiline: {
@@ -233,6 +237,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   checkboxChecked: { backgroundColor: colors.primary },
-  checkboxTick: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  checkLabel: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
+  checkboxTick: { color: colors.surface, fontWeight: '700', fontSize: 14 },
+  checkLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Text,
   View,
@@ -17,14 +17,14 @@ import RecipeEmoji from '../components/RecipeEmoji';
 import FadeInView from '../components/FadeInView';
 import { formatDuration } from '../lib/formatDuration';
 import SwipeableCard from '../components/SwipeableCard';
+import { useTheme } from '../contexts/ThemeContext';
 import {
-  colors,
   radius,
   spacing,
   maxContentWidth,
 } from '../theme/theme';
 
-function MetaBadge({ label }) {
+function MetaBadge({ label, styles }) {
   if (!label) return null;
   return (
     <View style={styles.badge}>
@@ -35,7 +35,7 @@ function MetaBadge({ label }) {
   );
 }
 
-function RecipeCardContent({ recipe, onQuickDelete }) {
+function RecipeCardContent({ recipe, onQuickDelete, styles, colors }) {
   const meta = [];
   if (recipe.duration) meta.push(formatDuration(recipe.duration));
   if (recipe.servings) meta.push(`${recipe.servings} pers.`);
@@ -65,7 +65,7 @@ function RecipeCardContent({ recipe, onQuickDelete }) {
             <Text
               style={[
                 styles.trashIcon,
-                { color: pressed ? '#e74c3c' : '#ccc' },
+                { color: pressed ? colors.danger : colors.textHint },
               ]}
             >
               ×
@@ -86,8 +86,8 @@ function RecipeCardContent({ recipe, onQuickDelete }) {
 
       {(recipe.cooking_type || recipe.fat_type) && (
         <View style={styles.badges}>
-          <MetaBadge label={recipe.cooking_type} />
-          <MetaBadge label={recipe.fat_type} />
+          <MetaBadge label={recipe.cooking_type} styles={styles} />
+          <MetaBadge label={recipe.fat_type} styles={styles} />
         </View>
       )}
     </View>
@@ -96,6 +96,8 @@ function RecipeCardContent({ recipe, onQuickDelete }) {
 
 
 export default function RecipesScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -224,6 +226,8 @@ export default function RecipesScreen({ navigation }) {
                   <RecipeCardContent
                     recipe={item}
                     onQuickDelete={quickDeleteRecipe}
+                    styles={styles}
+                    colors={colors}
                   />
                 </View>
               </SwipeableCard>
@@ -251,7 +255,7 @@ export default function RecipesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   header: {
     paddingHorizontal: 16,
@@ -269,7 +273,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   fab: {
     width: 52,
@@ -286,7 +290,7 @@ const styles = StyleSheet.create({
   },
   fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   fabText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 28,
     fontWeight: '600',
     lineHeight: 30,
@@ -304,10 +308,10 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     paddingTop: 16,
     paddingBottom: 16,
     paddingLeft: 16,
@@ -339,7 +343,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   aiBadge: {
     backgroundColor: colors.primaryDark,
@@ -348,14 +352,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   aiBadgeText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   desc: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: 6,
     lineHeight: 18,
   },
@@ -372,7 +376,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   badge: {
-    backgroundColor: '#FFF0E8',
+    backgroundColor: colors.primaryLight,
     borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -400,14 +404,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   emptyHint: {
     fontSize: 13,
-    color: '#AAA',
+    color: colors.textHint,
     marginTop: 6,
     textAlign: 'center',
   },
-  error: { color: colors.error, textAlign: 'center' },
+  error: { color: colors.danger, textAlign: 'center' },
 });

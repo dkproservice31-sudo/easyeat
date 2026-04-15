@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Text,
   View,
@@ -20,7 +20,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import SwipeableCard from '../components/SwipeableCard';
 import FadeInView from '../components/FadeInView';
-import { colors, radius, spacing, maxContentWidth } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { radius, spacing, maxContentWidth } from '../theme/theme';
 
 const UNITS = ['g', 'kg', 'L', 'ml', 'unité'];
 
@@ -41,7 +42,7 @@ function confirmDialog(title, message) {
   });
 }
 
-function FridgeRowContent({ item, onChangeQty, onQuickDelete }) {
+function FridgeRowContent({ item, onChangeQty, onQuickDelete, styles, colors }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(item.quantity));
 
@@ -99,7 +100,7 @@ function FridgeRowContent({ item, onChangeQty, onQuickDelete }) {
           <Text
             style={[
               styles.trashIcon,
-              { color: pressed ? '#e74c3c' : '#ccc' },
+              { color: pressed ? colors.danger : colors.textHint },
             ]}
           >
             ×
@@ -110,7 +111,7 @@ function FridgeRowContent({ item, onChangeQty, onQuickDelete }) {
   );
 }
 
-function AddItemModal({ visible, onClose, onAdd }) {
+function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
   const [name, setName] = useState('');
   const [qty, setQty] = useState('1');
   const [unit, setUnit] = useState('unité');
@@ -159,7 +160,7 @@ function AddItemModal({ visible, onClose, onAdd }) {
               value={name}
               onChangeText={setName}
               placeholder="Tomates, œufs, lait..."
-              placeholderTextColor="#A9A49C"
+              placeholderTextColor={colors.textHint}
               style={styles.modalInput}
               autoFocus
               maxLength={60}
@@ -170,7 +171,7 @@ function AddItemModal({ visible, onClose, onAdd }) {
               value={qty}
               onChangeText={setQty}
               placeholder="1"
-              placeholderTextColor="#A9A49C"
+              placeholderTextColor={colors.textHint}
               keyboardType="decimal-pad"
               style={styles.modalInput}
               maxLength={8}
@@ -237,6 +238,8 @@ function AddItemModal({ visible, onClose, onAdd }) {
 
 export default function FridgeScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -376,6 +379,8 @@ export default function FridgeScreen() {
                   item={item}
                   onChangeQty={changeQty}
                   onQuickDelete={quickDeleteItem}
+                  styles={styles}
+                  colors={colors}
                 />
               </SwipeableCard>
             </FadeInView>
@@ -403,12 +408,14 @@ export default function FridgeScreen() {
         visible={modalOpen}
         onClose={() => setModalOpen(false)}
         onAdd={addItem}
+        styles={styles}
+        colors={colors}
       />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
 
   // Header
@@ -429,11 +436,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   headerCount: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   fab: {
@@ -451,7 +458,7 @@ const styles = StyleSheet.create({
   },
   fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   fabText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 24,
     fontWeight: '600',
     lineHeight: 26,
@@ -477,10 +484,10 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     paddingLeft: 16,
     paddingRight: 38,
     paddingVertical: 14,
@@ -491,7 +498,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
   },
   qtyWrap: {
     flexDirection: 'row',
@@ -501,7 +508,7 @@ const styles = StyleSheet.create({
   qtyBadge: {
     height: 36,
     width: 50,
-    backgroundColor: '#FFF0E8',
+    backgroundColor: colors.ingredientBg,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -517,16 +524,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     paddingHorizontal: 0,
     paddingVertical: 0,
     fontSize: 16,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     textAlign: 'center',
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
-  unitText: { fontSize: 13, color: '#888', fontWeight: '600' },
+  unitText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
   trashHit: {
     position: 'absolute',
     top: 10,
@@ -553,12 +560,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     textAlign: 'center',
   },
   emptyHint: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     marginTop: 6,
     textAlign: 'center',
   },
@@ -577,7 +584,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: maxContentWidth,
     maxHeight: '90%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
@@ -589,25 +596,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 6,
   },
   fieldLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginTop: 10,
     marginBottom: 6,
   },
   modalInput: {
     minHeight: 44,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 16,
-    color: '#1A1A1A',
+    color: colors.text,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
   unitRow: {
@@ -621,8 +628,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -630,8 +637,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  unitChipText: { fontSize: 13, fontWeight: '700', color: '#666' },
-  unitChipTextActive: { color: '#fff' },
+  unitChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  unitChipTextActive: { color: colors.surface },
   modalActions: {
     marginTop: 10,
     gap: 8,
@@ -643,13 +650,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalAddText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  modalAddText: { color: colors.surface, fontSize: 15, fontWeight: '700' },
   modalCancelBtn: {
     minHeight: 48,
     borderRadius: 12,
     backgroundColor: 'transparent',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

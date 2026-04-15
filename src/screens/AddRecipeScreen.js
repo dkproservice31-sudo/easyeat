@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View, Alert, Platform, StyleSheet } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import ChipGroup from '../components/ChipGroup';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { colors, spacing, typography } from '../theme/theme';
+import { spacing } from '../theme/theme';
 
 const FAT_OPTIONS = [
   "Huile d'olive",
@@ -48,6 +49,8 @@ function confirmDialog(title, message) {
 
 export default function AddRecipeScreen({ navigation }) {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [ingredients, setIngredients] = useState('');
@@ -275,7 +278,7 @@ export default function AddRecipeScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   multiline: { minHeight: 80, paddingTop: spacing.md },
   multilineLarge: { minHeight: 140, paddingTop: spacing.md },
   row: { flexDirection: 'row', gap: spacing.md },

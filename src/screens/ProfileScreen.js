@@ -1,13 +1,14 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Text, View, StyleSheet, Pressable } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Screen from '../components/Screen';
 import FadeInView from '../components/FadeInView';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { colors, spacing } from '../theme/theme';
+import { spacing } from '../theme/theme';
 
-function StatCard({ emoji, value, label }) {
+function StatCard({ emoji, value, label, styles }) {
   return (
     <View style={styles.statCard}>
       <Text style={styles.statEmoji}>{emoji}</Text>
@@ -17,8 +18,41 @@ function StatCard({ emoji, value, label }) {
   );
 }
 
+function ThemeToggle({ isDark, onToggle, styles, colors }) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.themeRow,
+        pressed && { opacity: 0.85 },
+      ]}
+      accessibilityLabel="Basculer le mode sombre"
+    >
+      <View style={styles.themeLabelWrap}>
+        <Text style={styles.themeEmoji}>🌙</Text>
+        <Text style={styles.themeLabel}>Mode sombre</Text>
+      </View>
+      <View
+        style={[
+          styles.toggleTrack,
+          { backgroundColor: isDark ? colors.primary : colors.border },
+        ]}
+      >
+        <View
+          style={[
+            styles.toggleThumb,
+            { alignSelf: isDark ? 'flex-end' : 'flex-start' },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
 export default function ProfileScreen() {
   const { user, profile, signOut, isAdmin, isEditor } = useAuth();
+  const { colors, isDark, toggleTheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const navigation = useNavigation();
   const [stats, setStats] = useState({ recipes: 0, fridge: 0, ai: 0 });
 
@@ -61,7 +95,6 @@ export default function ProfileScreen() {
   return (
     <Screen>
       <View style={styles.container}>
-        {/* Header avatar */}
         <FadeInView delay={0}>
           <View style={styles.header}>
             <View style={styles.avatar}>
@@ -74,13 +107,21 @@ export default function ProfileScreen() {
           </View>
         </FadeInView>
 
-        {/* Stats */}
         <FadeInView delay={120}>
           <View style={styles.statsRow}>
-            <StatCard emoji="📖" value={stats.recipes} label="Recettes" />
-            <StatCard emoji="❄️" value={stats.fridge} label="Frigo" />
-            <StatCard emoji="✨" value={stats.ai} label="IA" />
+            <StatCard emoji="📖" value={stats.recipes} label="Recettes" styles={styles} />
+            <StatCard emoji="❄️" value={stats.fridge} label="Frigo" styles={styles} />
+            <StatCard emoji="✨" value={stats.ai} label="IA" styles={styles} />
           </View>
+        </FadeInView>
+
+        <FadeInView delay={180}>
+          <ThemeToggle
+            isDark={isDark}
+            onToggle={toggleTheme}
+            styles={styles}
+            colors={colors}
+          />
         </FadeInView>
 
         {isEditor && (
@@ -102,7 +143,6 @@ export default function ProfileScreen() {
 
         <View style={{ flex: 1 }} />
 
-        {/* Logout */}
         <Pressable
           onPress={signOut}
           style={({ pressed }) => [
@@ -118,96 +158,111 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 24,
-  },
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: 16,
+      paddingTop: 24,
+    },
+    header: { alignItems: 'center' },
+    avatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarText: { color: colors.surface, fontSize: 32, fontWeight: '700' },
+    name: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    email: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 4,
+      textAlign: 'center',
+    },
+    statsRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: 24,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      padding: 14,
+      alignItems: 'center',
+    },
+    statEmoji: { fontSize: 22 },
+    statValue: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 4,
+    },
+    statLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
 
-  // Header
-  header: {
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  email: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 4,
-    textAlign: 'center',
-  },
+    themeRow: {
+      marginTop: 16,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 0.5,
+      borderColor: colors.border,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    themeLabelWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    themeEmoji: { fontSize: 18 },
+    themeLabel: { fontSize: 15, color: colors.text, fontWeight: '600' },
+    toggleTrack: {
+      width: 44,
+      height: 24,
+      borderRadius: 12,
+      padding: 2,
+      justifyContent: 'center',
+    },
+    toggleThumb: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+    },
 
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    padding: 14,
-    alignItems: 'center',
-  },
-  statEmoji: { fontSize: 22 },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginTop: 4,
-  },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
+    adminBtn: {
+      marginTop: 16,
+      minHeight: 50,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    adminBtnText: { color: colors.surface, fontSize: 15, fontWeight: '700' },
 
-  adminBtn: {
-    marginTop: 24,
-    minHeight: 50,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  adminBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  // Sign out
-  signOutBtn: {
-    minHeight: 50,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  signOutText: {
-    color: '#e74c3c',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+    signOutBtn: {
+      minHeight: 50,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: 'transparent',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 24,
+    },
+    signOutText: { color: colors.danger, fontSize: 15, fontWeight: '700' },
+  });

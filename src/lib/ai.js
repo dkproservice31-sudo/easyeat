@@ -20,34 +20,63 @@ const RECIPE_SCHEMA = {
 
 export const isAIConfigured = () => !!GEMINI_KEY;
 
+// Convertit une erreur Gemini (HTTP status, réseau, parsing) en message
+// utilisateur compréhensible. Toujours appelée via `throw handleGeminiError(e)`.
+export function handleGeminiError(error) {
+  const status = error?.status;
+  // Erreur réseau (fetch rejette avec TypeError) : pas de status
+  if (status == null && (error?.name === 'TypeError' || /network|fetch/i.test(error?.message || ''))) {
+    return new Error('Pas de connexion internet.');
+  }
+  if (status === 429) {
+    return new Error('Trop de requêtes. Réessayez dans une minute.');
+  }
+  if (status === 500 || status === 503 || status === 502 || status === 504) {
+    return new Error('Le service IA est temporairement indisponible. Réessayez plus tard.');
+  }
+  return new Error('Une erreur est survenue. Réessayez.');
+}
+
+async function geminiFetch(body) {
+  let res;
+  try {
+    res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    throw handleGeminiError(e);
+  }
+  if (!res.ok) {
+    const err = new Error(`Gemini ${res.status}`);
+    err.status = res.status;
+    throw handleGeminiError(err);
+  }
+  return res.json();
+}
+
 async function callGemini(prompt) {
   if (!GEMINI_KEY) {
     throw new Error(
       "La génération IA n'est pas disponible pour le moment. Réessayez plus tard."
     );
   }
-
-  const res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: RECIPE_SCHEMA,
-        temperature: 0.8,
-      },
-    }),
+  const data = await geminiFetch({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RECIPE_SCHEMA,
+      temperature: 0.8,
+    },
   });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Gemini ${res.status}: ${body}`);
-  }
-  const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Réponse Gemini vide');
-  return JSON.parse(text);
+  if (!text) throw new Error('Une erreur est survenue. Réessayez.');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Une erreur est survenue. Réessayez.');
+  }
 }
 
 export async function generateRecipe({
@@ -88,8 +117,7 @@ Contraintes :
 // Demande à Gemini une LISTE de N titres de recettes pour une cuisine donnée.
 // `existingTitles` : tableau des titres déjà en base pour éviter les doublons.
 export async function generateRecipeTitles({ cuisine, count, existingTitles = [] }) {
-  const key = process.env.EXPO_PUBLIC_GEMINI_KEY || '';
-  if (!key) {
+  if (!GEMINI_KEY) {
     throw new Error(
       "La génération IA n'est pas disponible pour le moment."
     );
@@ -101,18 +129,10 @@ export async function generateRecipeTitles({ cuisine, count, existingTitles = []
           .join('\n')}\nPropose uniquement des recettes DIFFÉRENTES et NOUVELLES.`
       : '';
   const prompt = `Donne-moi une liste de ${count} recettes ${cuisine} populaires et traditionnelles distinctes. Garde le nom original du plat dans sa langue d'origine (par exemple "Dolma", "Khorovats", "Byorek" pour les recettes arméniennes, ne traduis pas ces noms). Réponds uniquement avec la liste des titres, un par ligne, sans numérotation ni commentaire.${exclusion}`;
-  const res = await fetch(`${ENDPOINT}?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.9 },
-    }),
+  const data = await geminiFetch({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.9 },
   });
-  if (!res.ok) {
-    throw new Error(`Gemini ${res.status}`);
-  }
-  const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   return text
     .split(/\r?\n/)
@@ -179,6 +199,62 @@ export async function generateRecipesBatch({
   }
   if (onProgress) onProgress(uniqueTitles.length, uniqueTitles.length, null);
   return { recipes, skipped };
+}
+
+// Appel Gemini "brut" (pas de schéma structuré) qui renvoie du JSON parsé.
+// Utilisé pour les calculs de macros où on ne veut pas imposer RECIPE_SCHEMA.
+async function callGeminiJson(prompt) {
+  if (!GEMINI_KEY) {
+    throw new Error(
+      "La génération IA n'est pas disponible pour le moment. Réessayez plus tard."
+    );
+  }
+  const data = await geminiFetch({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.2,
+    },
+  });
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Une erreur est survenue. Réessayez.');
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error('Une erreur est survenue. Réessayez.');
+  }
+}
+
+export async function calculateRecipeMacros(recipe) {
+  const portions = recipe?.servings || 1;
+  const prompt = `Pour cette recette avec les ingrédients suivants :
+${recipe?.ingredients || '(aucun)'}
+
+Portions prévues : ${portions}.
+
+Calcule les macronutriments TOTAUX pour la recette entière (toutes les portions) ET par portion. Réponds UNIQUEMENT en JSON avec ce format exact, sans markdown ni backticks :
+{
+  "total": { "calories": 850, "proteines": 45, "glucides": 60, "lipides": 35 },
+  "par_portion": { "calories": 425, "proteines": 22, "glucides": 30, "lipides": 17 },
+  "portions": ${portions}
+}`;
+  return callGeminiJson(prompt);
+}
+
+export async function calculateIngredientMacros(ingredientName, quantity) {
+  const qty = quantity ? `${quantity} ` : '';
+  const prompt = `Pour cet ingrédient : ${qty}${ingredientName}. Calcule les macronutriments. Réponds UNIQUEMENT en JSON avec ce format exact, sans markdown ni backticks :
+{
+  "calories": 150,
+  "proteines": 12,
+  "glucides": 5,
+  "lipides": 8
+}`;
+  return callGeminiJson(prompt);
 }
 
 export async function adjustRecipeServings({ recipe, newServings }) {

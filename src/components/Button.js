@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import {
   Animated,
   Pressable,
@@ -6,7 +6,8 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { colors, spacing } from '../theme/theme';
+import { spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -18,6 +19,8 @@ export default function Button({
   disabled,
   style,
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isGhost = variant === 'ghost';
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -55,7 +58,7 @@ export default function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={isGhost ? colors.primary : '#fff'} />
+        <ActivityIndicator color={isGhost ? colors.primary : colors.surface} />
       ) : (
         <Text style={[styles.text, isGhost && styles.textGhost]}>{title}</Text>
       )}
@@ -63,7 +66,7 @@ export default function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   base: {
     minHeight: 50,
     paddingHorizontal: spacing.lg,
@@ -76,9 +79,9 @@ const styles = StyleSheet.create({
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0E8E0',
+    borderColor: colors.border,
   },
   disabled: { opacity: 0.5 },
-  text: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  text: { color: colors.surface, fontSize: 16, fontWeight: '700' },
   textGhost: { color: colors.primary },
 });

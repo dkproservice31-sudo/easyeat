@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Text, View, StyleSheet, Alert, Platform, Pressable } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
@@ -9,7 +9,8 @@ import RecipePreview from '../components/RecipePreview';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { generateRecipe } from '../lib/ai';
-import { colors, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { spacing } from '../theme/theme';
 
 const CUISINES = ['française', 'italienne', 'espagnole'];
 
@@ -41,6 +42,8 @@ function notify(title, message) {
 
 export default function AdminEditFeaturedScreen({ route, navigation }) {
   const { user, isAdmin } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const existing = route?.params?.recipe ?? null;
   const presetCuisine = route?.params?.presetCuisine ?? null;
 
@@ -339,17 +342,17 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: spacing.lg,
   },
   sectionLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: colors.text,
     marginBottom: 6,
     marginTop: spacing.sm,
   },
@@ -357,7 +360,7 @@ const styles = StyleSheet.create({
   multilineLarge: { minHeight: 140, paddingTop: spacing.md },
 
   aiBox: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: colors.background,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primary,
@@ -365,8 +368,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.md,
   },
-  aiTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
-  aiHint: { fontSize: 12, color: '#888', marginTop: 2, marginBottom: 8 },
+  aiTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  aiHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2, marginBottom: 8 },
   aiBtn: {
     backgroundColor: colors.primary,
     borderRadius: 12,
@@ -376,5 +379,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  aiBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  aiBtnText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
 });

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Text, View, Alert, Platform, StyleSheet } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../contexts/AuthContext';
-import { spacing, colors } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { spacing } from '../theme/theme';
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -13,6 +14,8 @@ function notify(title, message) {
 
 export default function SignUpScreen({ navigation }) {
   const { signUp } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
@@ -168,7 +171,7 @@ export default function SignUpScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingTop: 60,
@@ -195,7 +198,7 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: {
     fontSize: 14,
-    color: '#888',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 6,
   },

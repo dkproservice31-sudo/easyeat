@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import StepsList from './StepsList';
 import IngredientsList from './IngredientsList';
 import { formatDuration } from '../lib/formatDuration';
-import { colors, radius, spacing } from '../theme/theme';
+import { radius, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 function Pill({ label, value }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   if (!value) return null;
   return (
     <View style={styles.pill}>
@@ -16,6 +19,8 @@ function Pill({ label, value }) {
 }
 
 export default function RecipePreview({ recipe }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   if (!recipe) return null;
   return (
     <View style={styles.card}>
@@ -48,7 +53,7 @@ export default function RecipePreview({ recipe }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -60,7 +65,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: colors.primary },
   desc: {
     fontSize: 14,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginTop: spacing.xs,
     lineHeight: 20,
   },
@@ -71,7 +76,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   pill: {
-    backgroundColor: '#FFF1E8',
+    backgroundColor: colors.primaryLight,
     borderRadius: radius.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
@@ -79,7 +84,7 @@ const styles = StyleSheet.create({
   pillLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
   },
   pillValue: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, radius, spacing } from '../theme/theme';
+import { radius, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Sépare le texte en étapes. Gère deux cas :
 // 1) Étapes séparées par saut de ligne, avec ou sans numérotation.
@@ -57,6 +58,8 @@ function parseSteps(raw) {
 }
 
 export default function StepsList({ steps }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const list = parseSteps(steps);
   if (list.length === 0) return null;
 
@@ -74,15 +77,15 @@ export default function StepsList({ steps }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   wrap: {
     gap: 10,
   },
   bubble: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#F0E8E0',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 14,
@@ -98,7 +101,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   circleText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 16,
@@ -107,7 +110,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    color: '#1A1A1A',
+    color: colors.text,
     paddingTop: 3,
   },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,8 @@ import AdminScreen from '../screens/AdminScreen';
 import AdminEditFeaturedScreen from '../screens/AdminEditFeaturedScreen';
 
 import { useAuth } from '../contexts/AuthContext';
-import { colors, radius, spacing } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { radius, spacing } from '../theme/theme';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -51,6 +52,8 @@ const EMOJI_STYLE =
 
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   // Sur web, on combine avec env(safe-area-inset-bottom) via style string
   const webSafeBottom =
@@ -132,6 +135,7 @@ function MainTabs() {
 }
 
 function AppStack() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -212,6 +216,7 @@ function AppStack() {
 
 // Navigation visiteur : accueil + auth + détail recette featured
 function PublicStack() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -266,6 +271,8 @@ function PublicStack() {
 
 export default function RootNavigator() {
   const { session, loading } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   if (loading) {
     return (
@@ -282,7 +289,7 @@ export default function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   loading: {
     flex: 1,
     alignItems: 'center',
@@ -332,5 +339,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelActive: { color: colors.primary },
-  labelInactive: { color: '#AAAAAA' },
+  labelInactive: { color: colors.textHint },
 });
