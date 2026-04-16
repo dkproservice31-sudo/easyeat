@@ -54,8 +54,14 @@ export function getRecipeEmoji(title) {
     return '🥩';
   if (/\b(poulet|coq)\b/.test(t)) return '🍗';
 
+  // === Fruits de mer / coquillages (priorité avant "poissons") ===
+  if (/\b(moules?|coquilles?|saint[\s-]?jacques|hu[îi]tres?)\b/.test(t))
+    return '🦪';
+  if (/\bhomards?\b/.test(t)) return '🦞';
+  if (/\bcrabes?\b/.test(t)) return '🦀';
+
   // === Poissons ===
-  if (/(bacalao|baccal[àa]|morue|poisson|saumon|thon|anchois|brandade|bouillabaisse|moules|merlu|branzino|cabillaud|dorade|bar\b)/.test(t))
+  if (/(bacalao|baccal[àa]|morue|poisson|saumon|thon|anchois|brandade|bouillabaisse|merlu|branzino|cabillaud|dorade|bar\b)/.test(t))
     return '🐟';
 
   // === Riz / féculents ===

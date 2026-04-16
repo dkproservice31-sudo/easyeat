@@ -85,12 +85,30 @@ export function AuthProvider({ children }) {
           first_name: extra.firstName || null,
           last_name: extra.lastName || null,
           age: extra.age || null,
+          requested_editor_id: extra.requestedEditorId || null,
         },
         { onConflict: 'id' }
       );
       if (profileError) console.warn('profile upsert:', profileError.message);
+    } else if (data?.user && extra.requestedEditorId) {
+      // Cas confirmation email : le profil est créé par trigger, on patch après-coup
+      await supabase
+        .from('profiles')
+        .update({ requested_editor_id: extra.requestedEditorId })
+        .eq('id', data.user.id);
     }
     return { data, error: null };
+  };
+
+  const reloadProfile = async () => {
+    if (!session?.user) return null;
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (data) setProfile(data);
+    return data;
   };
 
   const signOut = () => supabase.auth.signOut();
@@ -98,6 +116,8 @@ export function AuthProvider({ children }) {
   const role = profile?.role ?? 'member';
   const isAdmin = role === 'admin';
   const isEditor = role === 'editor' || role === 'admin';
+  const isApproved = profile ? (profile.approved === true || isEditor) : false;
+  const isBanned = profile?.banned === true;
 
   const value = {
     session,
@@ -106,10 +126,13 @@ export function AuthProvider({ children }) {
     role,
     isAdmin,
     isEditor,
+    isApproved,
+    isBanned,
     loading,
     signIn,
     signUp,
     signOut,
+    reloadProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

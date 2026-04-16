@@ -14,6 +14,7 @@ const RECIPE_SCHEMA = {
     cooking_temp: { type: 'INTEGER' },
     cooking_type: { type: 'STRING' },
     fat_type: { type: 'STRING' },
+    dish_type: { type: 'STRING' },
   },
   required: ['title', 'ingredients', 'steps'],
 };
@@ -109,6 +110,7 @@ Contraintes :
 - "cooking_temp" : température en °C (entier, ou 0 si pas de four)
 - "cooking_type" : l'une de ces valeurs : "Au four", "Poêle", "Vapeur", "Grill", "Friture", "Mijotage", "Wok", "Sans cuisson"
 - "fat_type" : l'une de ces valeurs : "Huile d'olive", "Huile de tournesol", "Beurre", "Huile de coco", "Huile de sésame", "Saindoux", "Sans matière grasse"
+- "dish_type" : exactement l'une de ces valeurs (en minuscules) : "viande", "poisson", "vegan", "végétarien", "dessert". Choisis "vegan" uniquement si la recette n'utilise AUCUN produit animal (ni œuf, ni laitage, ni miel).
 - Réponds en français.`;
 
   return callGemini(text);
@@ -229,6 +231,52 @@ async function callGeminiJson(prompt) {
   }
 }
 
+// Demande à Gemini de classer une recette dans une catégorie de plat.
+// Retourne 'viande' | 'poisson' | 'vegan' | 'végétarien' | 'dessert' | null si invalide.
+export async function classifyDishType({ title, ingredients }) {
+  if (!GEMINI_KEY) {
+    throw new Error("La génération IA n'est pas disponible pour le moment.");
+  }
+  const prompt = `Voici une recette :
+Titre : ${title || '(sans titre)'}.
+Ingrédients : ${ingredients || '(non précisés)'}.
+Détermine le type de plat parmi EXACTEMENT une de ces valeurs : viande, poisson, vegan, végétarien, dessert.
+Règles :
+- viande = contient de la viande (bœuf, poulet, porc, agneau, canard, etc.)
+- poisson = contient du poisson ou fruits de mer (saumon, morue, crevettes, etc.) mais PAS de viande
+- vegan = AUCUN produit animal (pas de viande, pas de poisson, pas de lait, pas d'œuf, pas de beurre, pas de fromage, pas de miel)
+- végétarien = pas de viande, pas de poisson, mais peut contenir lait, œuf, beurre, fromage
+- dessert = plat sucré (gâteau, tarte, crème, glace, etc.)
+Réponds UNIQUEMENT avec le mot (viande, poisson, vegan, végétarien ou dessert), rien d'autre.`;
+
+  let res;
+  try {
+    res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1 },
+      }),
+    });
+  } catch (e) {
+    throw handleGeminiError(e);
+  }
+  if (!res.ok) {
+    const err = new Error(`Gemini ${res.status}`);
+    err.status = res.status;
+    throw handleGeminiError(err);
+  }
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '')
+    .trim()
+    .toLowerCase();
+  const VALID = ['viande', 'poisson', 'vegan', 'végétarien', 'vegetarien', 'dessert'];
+  const found = VALID.find((v) => text.includes(v));
+  if (!found) return null;
+  return found === 'vegetarien' ? 'végétarien' : found;
+}
+
 export async function calculateRecipeMacros(recipe) {
   const portions = recipe?.servings || 1;
   const prompt = `Pour cette recette avec les ingrédients suivants :
@@ -243,6 +291,93 @@ Calcule les macronutriments TOTAUX pour la recette entière (toutes les portions
   "portions": ${portions}
 }`;
   return callGeminiJson(prompt);
+}
+
+// Bilan nutritionnel global à partir d'une liste de recettes de l'utilisateur.
+// Retourne un texte libre (français) sans markdown.
+export async function analyzeNutritionBalance({ recipes }) {
+  if (!GEMINI_KEY) {
+    throw new Error("L'analyse IA n'est pas disponible pour le moment.");
+  }
+  const list = (recipes || [])
+    .map((r) => `- ${r.title || '(sans titre)'} : ${(r.ingredients || '').replace(/\n/g, ', ')}`)
+    .join('\n');
+  const prompt = `Voici la liste des recettes de cet utilisateur :
+${list || '(aucune recette)'}
+
+Fais un bilan nutritionnel global : calories moyennes par repas, répartition protéines/glucides/lipides, points forts et points à améliorer. Réponds en français, de manière concise (max 200 mots). N'utilise pas de markdown (pas de **, #, etc.), juste du texte simple.`;
+
+  let res;
+  try {
+    res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.4 },
+      }),
+    });
+  } catch (e) {
+    throw handleGeminiError(e);
+  }
+  if (!res.ok) {
+    const err = new Error(`Gemini ${res.status}`);
+    err.status = res.status;
+    throw handleGeminiError(err);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text) throw new Error('Une erreur est survenue. Réessayez.');
+  return text.trim();
+}
+
+// Assistant cuisinier : envoie le contexte de la recette + l'historique du chat
+// + la nouvelle question, et renvoie la réponse texte du chef IA.
+export async function askCookAssistant({ recipe, history = [], message }) {
+  if (!GEMINI_KEY) {
+    throw new Error("L'assistant n'est pas disponible pour le moment.");
+  }
+  const context = `Tu es un chef cuisinier expert. Voici la recette :
+Titre : ${recipe?.title || '(sans titre)'}
+Ingrédients : ${recipe?.ingredients || '(non précisés)'}
+Étapes : ${recipe?.steps || '(non précisées)'}
+Portions : ${recipe?.servings || 'non spécifié'}
+
+Réponds en français, de manière concise et pratique. Tu peux conseiller sur : l'ordre optimal de préparation, les découpes (cubes, julienne, etc.), les temps de cuisson selon les préférences (saignant, à point, bien cuit), les astuces pour réussir, les substitutions d'ingrédients, les accompagnements. Si l'utilisateur parle de viande, précise les effets du temps de cuisson (plus tendre, plus ferme, etc.).`;
+
+  // Historique au format Gemini : alternance user/model
+  const contents = [
+    { role: 'user', parts: [{ text: context }] },
+    { role: 'model', parts: [{ text: "D'accord, je suis prêt à vous aider sur cette recette." }] },
+    ...history.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }],
+    })),
+    { role: 'user', parts: [{ text: message }] },
+  ];
+
+  let res;
+  try {
+    res = await fetch(`${ENDPOINT}?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: { temperature: 0.7 },
+      }),
+    });
+  } catch (e) {
+    throw handleGeminiError(e);
+  }
+  if (!res.ok) {
+    const err = new Error(`Gemini ${res.status}`);
+    err.status = res.status;
+    throw handleGeminiError(err);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text) throw new Error('Une erreur est survenue. Réessayez.');
+  return text.trim();
 }
 
 export async function calculateIngredientMacros(ingredientName, quantity) {

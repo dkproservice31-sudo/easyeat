@@ -101,7 +101,7 @@ const createStyles = (colors) => StyleSheet.create({
     marginTop: 1,
   },
   circleText: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 16,

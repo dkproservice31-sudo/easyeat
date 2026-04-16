@@ -458,7 +458,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   fabText: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '600',
     lineHeight: 26,
@@ -638,7 +638,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   unitChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  unitChipTextActive: { color: colors.surface },
+  unitChipTextActive: { color: '#FFFFFF' },
   modalActions: {
     marginTop: 10,
     gap: 8,
@@ -650,7 +650,7 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalAddText: { color: colors.surface, fontSize: 15, fontWeight: '700' },
+  modalAddText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   modalCancelBtn: {
     minHeight: 48,
     borderRadius: 12,

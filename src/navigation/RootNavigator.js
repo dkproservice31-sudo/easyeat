@@ -19,6 +19,10 @@ import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import AddRecipeScreen from '../screens/AddRecipeScreen';
 import RecipeDetailScreen from '../screens/RecipeDetailScreen';
+import ChefAssistantScreen from '../screens/ChefAssistantScreen';
+import HelpScreen from '../screens/HelpScreen';
+import PendingApprovalScreen from '../screens/PendingApprovalScreen';
+import BannedScreen from '../screens/BannedScreen';
 import EditRecipeScreen from '../screens/EditRecipeScreen';
 import FridgeScreen from '../screens/FridgeScreen';
 import ShoppingScreen from '../screens/ShoppingScreen';
@@ -185,6 +189,23 @@ function AppStack() {
         }}
       />
       <Stack.Screen
+        name="ChefAssistant"
+        component={ChefAssistantScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Help"
+        component={HelpScreen}
+        options={{
+          headerShown: true,
+          title: 'Aide',
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '700', color: colors.text },
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
         name="Admin"
         component={AdminScreen}
         options={{
@@ -269,8 +290,14 @@ function PublicStack() {
   );
 }
 
+function GatedStack({ isBanned, isApproved }) {
+  if (isBanned) return <BannedScreen />;
+  if (!isApproved) return <PendingApprovalScreen />;
+  return <AppStack />;
+}
+
 export default function RootNavigator() {
-  const { session, loading } = useAuth();
+  const { session, loading, profile, isBanned, isApproved } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -282,9 +309,22 @@ export default function RootNavigator() {
     );
   }
 
+  // Session présente mais profil pas encore chargé → loader court
+  if (session && !profile) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      {session ? <AppStack /> : <PublicStack />}
+      {session ? (
+        <GatedStack isBanned={isBanned} isApproved={isApproved} />
+      ) : (
+        <PublicStack />
+      )}
     </NavigationContainer>
   );
 }

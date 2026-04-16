@@ -50,6 +50,7 @@ export default function ChipGroup({
   onAddCustom,
   onDeleteCustom,
   disabled,
+  formatLabel,
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -81,7 +82,7 @@ export default function ChipGroup({
         {options.map((opt) => (
           <Chip
             key={`opt-${opt}`}
-            label={opt}
+            label={formatLabel ? formatLabel(opt) : opt}
             selected={value === opt}
             onPress={() => onChange(value === opt ? '' : opt)}
             disabled={disabled}
@@ -91,7 +92,7 @@ export default function ChipGroup({
         {customs.map((c) => (
           <Chip
             key={`custom-${c.id}`}
-            label={c.value}
+            label={formatLabel ? formatLabel(c.value) : c.value}
             selected={value === c.value}
             onPress={() => onChange(value === c.value ? '' : c.value)}
             onDelete={() => onDeleteCustom?.(c)}

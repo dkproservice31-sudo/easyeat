@@ -6,10 +6,11 @@ const EMOJI_FONT =
   '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji",sans-serif';
 
 // Rend l'emoji d'une recette de manière cohérente sur tous les écrans.
-// Sur web, on utilise un <span> natif pour forcer la police emoji via style
-// inline (RN Web ne propage pas toujours fontFamily correctement sur Text).
-export default function RecipeEmoji({ title, size = 32, style }) {
-  const char = getRecipeEmoji(title);
+// Priorité : customEmoji (prop directe) > recipe.custom_emoji > auto depuis title.
+export default function RecipeEmoji({ title, recipe, customEmoji, size = 32, style }) {
+  const resolvedTitle = title ?? recipe?.title;
+  const override = customEmoji ?? recipe?.custom_emoji;
+  const char = override && override.trim() ? override : getRecipeEmoji(resolvedTitle);
   if (Platform.OS === 'web') {
     return React.createElement(
       'span',

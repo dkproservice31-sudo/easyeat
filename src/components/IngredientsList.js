@@ -174,7 +174,12 @@ const createStyles = (colors) =>
       gap: spacing.sm,
       width: '100%',
     },
-    pillCol: { alignItems: 'flex-start' },
+    pillCol: {
+      alignItems: 'flex-start',
+      maxWidth: '100%',
+      flexShrink: 1,
+      flexBasis: 'auto',
+    },
     chip: {
       flexShrink: 1,
       maxWidth: '100%',
@@ -186,7 +191,7 @@ const createStyles = (colors) =>
       paddingVertical: 8,
       position: 'relative',
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: 6,
     },
     chipLoader: { marginLeft: 4 },
@@ -194,6 +199,8 @@ const createStyles = (colors) =>
       fontSize: 14,
       fontWeight: '600',
       color: colors.text,
+      flexShrink: 1,
+      flexWrap: 'wrap',
     },
     dot: {
       position: 'absolute',

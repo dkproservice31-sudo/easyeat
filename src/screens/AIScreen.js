@@ -97,6 +97,7 @@ export default function AIScreen() {
       cooking_temp: recipe.cooking_temp || null,
       cooking_type: recipe.cooking_type || null,
       fat_type: recipe.fat_type || null,
+      dish_type: recipe.dish_type || 'tout',
       generated_by_ai: true,
     });
 
@@ -166,7 +167,7 @@ export default function AIScreen() {
             />
             <View style={{ height: spacing.sm }} />
             <Button
-              title="Regénérer"
+              title="Régénérer"
               variant="ghost"
               onPress={onGenerate}
               disabled={generating || saving}
@@ -237,6 +238,6 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   checkboxChecked: { backgroundColor: colors.primary },
-  checkboxTick: { color: colors.surface, fontWeight: '700', fontSize: 14 },
+  checkboxTick: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   checkLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
 });

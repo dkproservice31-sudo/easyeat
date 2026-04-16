@@ -3,12 +3,15 @@ import {
   Text,
   View,
   Pressable,
+  ScrollView,
   StyleSheet,
   FlatList,
   ActivityIndicator,
   RefreshControl,
   Alert,
   Platform,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -17,6 +20,14 @@ import RecipeEmoji from '../components/RecipeEmoji';
 import FadeInView from '../components/FadeInView';
 import { formatDuration } from '../lib/formatDuration';
 import SwipeableCard from '../components/SwipeableCard';
+import PressableScale from '../components/PressableScale';
+import {
+  DISH_TYPES,
+  DISH_FILTER_ALL,
+  matchesDishType,
+  normalizeDishType,
+} from '../lib/dishTypes';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   radius,
@@ -43,10 +54,15 @@ function RecipeCardContent({ recipe, onQuickDelete, styles, colors }) {
   return (
     <View>
       <View style={styles.titleRow}>
-        <RecipeEmoji title={recipe.title} size={32} />
+        <RecipeEmoji recipe={recipe} size={32} />
         <Text style={styles.title} numberOfLines={2}>
           {recipe.title}
         </Text>
+        {normalizeDishType(recipe.dish_type) === 'vegan' && (
+          <View style={styles.veganBadge}>
+            <Text style={styles.veganBadgeText}>🌱</Text>
+          </View>
+        )}
         {recipe.generated_by_ai && (
           <View style={styles.aiBadge}>
             <Text style={styles.aiBadgeText}>IA</Text>
@@ -96,6 +112,7 @@ function RecipeCardContent({ recipe, onQuickDelete, styles, colors }) {
 
 
 export default function RecipesScreen({ navigation }) {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [recipes, setRecipes] = useState([]);
@@ -103,6 +120,53 @@ export default function RecipesScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [openCardId, setOpenCardId] = useState(null);
+  const [dishFilter, setDishFilter] = useState(DISH_FILTER_ALL);
+
+  // Modale "Suggérer une recette à l'admin"
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestTitle, setSuggestTitle] = useState('');
+  const [suggestCuisine, setSuggestCuisine] = useState('');
+  const [suggestDescription, setSuggestDescription] = useState('');
+  const [suggestSubmitting, setSuggestSubmitting] = useState(false);
+
+  const openSuggestModal = () => {
+    setSuggestTitle('');
+    setSuggestCuisine('');
+    setSuggestDescription('');
+    setSuggestOpen(true);
+  };
+
+  const submitSuggestion = async () => {
+    if (!user) return;
+    if (!suggestTitle.trim() || !suggestCuisine.trim()) {
+      const msg = 'Le titre et le pays sont obligatoires.';
+      if (Platform.OS === 'web') window.alert(`Champs requis\n\n${msg}`);
+      else Alert.alert('Champs requis', msg);
+      return;
+    }
+    setSuggestSubmitting(true);
+    const { error: insErr } = await supabase.from('recipe_suggestions').insert({
+      user_id: user.id,
+      title: suggestTitle.trim(),
+      cuisine: suggestCuisine.trim().toLowerCase(),
+      description: suggestDescription.trim() || null,
+    });
+    setSuggestSubmitting(false);
+    if (insErr) {
+      if (Platform.OS === 'web') window.alert(`Envoi impossible\n\n${insErr.message}`);
+      else Alert.alert('Envoi impossible', insErr.message);
+      return;
+    }
+    setSuggestOpen(false);
+    if (Platform.OS === 'web')
+      window.alert('Merci !\n\nVotre suggestion a été envoyée !');
+    else Alert.alert('Merci !', 'Votre suggestion a été envoyée !');
+  };
+
+  const filteredRecipes = useMemo(
+    () => recipes.filter((r) => matchesDishType(r.dish_type, dishFilter)),
+    [recipes, dishFilter]
+  );
 
   const quickDeleteRecipe = async (recipe) => {
     const ok = await (Platform.OS === 'web'
@@ -180,16 +244,58 @@ export default function RecipesScreen({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <Text style={styles.headerTitle}>Recettes</Text>
-          <Pressable
-            onPress={() => navigation.navigate('AddRecipe')}
-            style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-            accessibilityLabel="Ajouter une recette"
-            hitSlop={8}
-          >
-            <Text style={styles.fabText}>+</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={openSuggestModal}
+              style={({ pressed }) => [
+                styles.suggestFab,
+                pressed && styles.fabPressed,
+              ]}
+              accessibilityLabel="Suggérer une recette à l'admin"
+              hitSlop={8}
+            >
+              <Text style={styles.suggestFabText}>💡</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('AddRecipe')}
+              style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+              accessibilityLabel="Ajouter une recette"
+              hitSlop={8}
+            >
+              <Text style={styles.fabText}>+</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.dishChipsContent}
+        style={styles.dishChipsScroll}
+      >
+        {[
+          { key: DISH_FILTER_ALL, label: 'Tout' },
+          ...DISH_TYPES.map((d) => ({
+            key: d.key,
+            label: `${d.emoji} ${d.label}`,
+          })),
+        ].map((d) => {
+          const active = dishFilter === d.key;
+          return (
+            <PressableScale
+              key={d.key}
+              onPress={() => setDishFilter(d.key)}
+              style={[styles.dishChip, active && styles.dishChipActive]}
+              scaleTo={0.92}
+            >
+              <Text style={[styles.dishChipText, active && styles.dishChipTextActive]}>
+                {d.label}
+              </Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
 
       {loading ? (
         <View style={styles.center}>
@@ -201,7 +307,7 @@ export default function RecipesScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={recipes}
+          data={filteredRecipes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -251,6 +357,85 @@ export default function RecipesScreen({ navigation }) {
           }
         />
       )}
+
+      <Modal
+        visible={suggestOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSuggestOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Suggérer une recette</Text>
+            <Text style={styles.modalHint}>
+              Proposez cette recette pour le catalogue.
+            </Text>
+
+            <Text style={styles.modalLabel}>Titre *</Text>
+            <TextInput
+              value={suggestTitle}
+              onChangeText={setSuggestTitle}
+              placeholder="Ex: Couscous royal, Pad Thaï..."
+              placeholderTextColor={colors.textHint}
+              style={styles.modalInput}
+              maxLength={120}
+              editable={!suggestSubmitting}
+            />
+
+            <Text style={styles.modalLabel}>Pays / Cuisine *</Text>
+            <TextInput
+              value={suggestCuisine}
+              onChangeText={setSuggestCuisine}
+              placeholder="Ex: marocaine, thaïlandaise..."
+              placeholderTextColor={colors.textHint}
+              style={styles.modalInput}
+              maxLength={40}
+              autoCapitalize="none"
+              editable={!suggestSubmitting}
+            />
+
+            <Text style={styles.modalLabel}>Description</Text>
+            <TextInput
+              value={suggestDescription}
+              onChangeText={setSuggestDescription}
+              placeholder="Pourquoi cette recette ? (optionnel)"
+              placeholderTextColor={colors.textHint}
+              style={[styles.modalInput, styles.modalInputMultiline]}
+              multiline
+              numberOfLines={3}
+              maxLength={300}
+              textAlignVertical="top"
+              editable={!suggestSubmitting}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setSuggestOpen(false)}
+                disabled={suggestSubmitting}
+                style={({ pressed }) => [
+                  styles.modalCancelBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                onPress={submitSuggestion}
+                disabled={suggestSubmitting}
+                style={({ pressed }) => [
+                  styles.modalSubmitBtn,
+                  suggestSubmitting && { opacity: 0.6 },
+                  pressed && !suggestSubmitting && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.modalSubmitText}>
+                  {suggestSubmitting ? 'Envoi...' : 'Envoyer la suggestion'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -290,7 +475,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
   fabText: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '600',
     lineHeight: 30,
@@ -334,6 +519,89 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
   },
   trashIcon: { fontSize: 16, fontWeight: '600', lineHeight: 18 },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  suggestFab: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestFabText: { fontSize: 20, lineHeight: 22 },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  modalInput: {
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.text,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
+  },
+  modalInputMultiline: { minHeight: 70, paddingTop: 10 },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  modalSubmitBtn: {
+    flex: 1.4,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -345,6 +613,40 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
+  veganBadge: {
+    backgroundColor: colors.successLight,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  veganBadgeText: { fontSize: 14 },
+  dishChipsScroll: {
+    marginBottom: 20,
+    flexGrow: 0,
+    flexShrink: 0,
+    overflow: 'visible',
+  },
+  dishChipsContent: {
+    gap: spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  dishChip: {
+    minHeight: 36,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dishChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dishChipText: { fontSize: 13, color: colors.textSecondary, fontWeight: '700' },
+  dishChipTextActive: { color: '#FFFFFF' },
   aiBadge: {
     backgroundColor: colors.primaryDark,
     borderRadius: radius.pill,
@@ -352,7 +654,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 3,
   },
   aiBadgeText: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,

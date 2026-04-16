@@ -218,5 +218,5 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 2,
   },
   deleteIcon: { fontSize: 22 },
-  deleteLabel: { color: colors.surface, fontSize: 11, fontWeight: '700' },
+  deleteLabel: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 });

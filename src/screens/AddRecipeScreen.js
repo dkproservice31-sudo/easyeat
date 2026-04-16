@@ -7,6 +7,7 @@ import ChipGroup from '../components/ChipGroup';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { DISH_TYPES, DISH_FILTER_ALL } from '../lib/dishTypes';
 import { spacing } from '../theme/theme';
 
 const FAT_OPTIONS = [
@@ -63,6 +64,7 @@ export default function AddRecipeScreen({ navigation }) {
   const [fatCustoms, setFatCustoms] = useState([]);
   const [cookValue, setCookValue] = useState('');
   const [cookCustoms, setCookCustoms] = useState([]);
+  const [dishType, setDishType] = useState(DISH_FILTER_ALL);
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -147,6 +149,7 @@ export default function AddRecipeScreen({ navigation }) {
       cooking_temp: cookingTemp ? parseInt(cookingTemp, 10) : null,
       fat_type: fatValue || null,
       cooking_type: cookValue || null,
+      dish_type: dishType || DISH_FILTER_ALL,
     });
     setLoading(false);
 
@@ -262,6 +265,20 @@ export default function AddRecipeScreen({ navigation }) {
         onAddCustom={(v) => addCustomOption('cooking_type', v)}
         onDeleteCustom={(c) => deleteCustomOption('cooking_type', c)}
         disabled={loading}
+      />
+
+      {/* Type de plat */}
+      <Text style={styles.sectionLabel}>Type de plat</Text>
+      <ChipGroup
+        options={[DISH_FILTER_ALL, ...DISH_TYPES.map((d) => d.key)]}
+        value={dishType}
+        onChange={(v) => setDishType(v || DISH_FILTER_ALL)}
+        disabled={loading}
+        formatLabel={(v) => {
+          if (v === DISH_FILTER_ALL) return 'Tout';
+          const d = DISH_TYPES.find((x) => x.key === v);
+          return d ? `${d.emoji} ${d.label}` : v;
+        }}
       />
 
       <View style={{ marginTop: spacing.md }}>

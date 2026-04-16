@@ -7,6 +7,7 @@ import ChipGroup from '../components/ChipGroup';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { DISH_TYPES, DISH_FILTER_ALL, normalizeDishType } from '../lib/dishTypes';
 import { spacing } from '../theme/theme';
 
 const FAT_OPTIONS = [
@@ -71,6 +72,16 @@ export default function EditRecipeScreen({ navigation, route }) {
   const [fatCustoms, setFatCustoms] = useState([]);
   const [cookValue, setCookValue] = useState(recipe?.cooking_type ?? '');
   const [cookCustoms, setCookCustoms] = useState([]);
+
+  // Pré-sélectionne le dish_type courant ; les valeurs accentuées comme
+  // "végétarien" doivent matcher la clé exacte de DISH_TYPES.
+  const initialDishType = (() => {
+    const dt = normalizeDishType(recipe?.dish_type);
+    if (!dt || dt === DISH_FILTER_ALL) return DISH_FILTER_ALL;
+    const match = DISH_TYPES.find((d) => normalizeDishType(d.key) === dt);
+    return match ? match.key : DISH_FILTER_ALL;
+  })();
+  const [dishType, setDishType] = useState(initialDishType);
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -153,6 +164,7 @@ export default function EditRecipeScreen({ navigation, route }) {
       cooking_temp: cookingTemp ? parseInt(cookingTemp, 10) : null,
       fat_type: fatValue || null,
       cooking_type: cookValue || null,
+      dish_type: dishType || DISH_FILTER_ALL,
     };
     const { data, error } = await supabase
       .from('recipes')
@@ -288,6 +300,19 @@ export default function EditRecipeScreen({ navigation, route }) {
         onAddCustom={(v) => addCustomOption('cooking_type', v)}
         onDeleteCustom={(c) => deleteCustomOption('cooking_type', c)}
         disabled={loading}
+      />
+
+      <Text style={styles.sectionLabel}>Type de plat</Text>
+      <ChipGroup
+        options={[DISH_FILTER_ALL, ...DISH_TYPES.map((d) => d.key)]}
+        value={dishType}
+        onChange={(v) => setDishType(v || DISH_FILTER_ALL)}
+        disabled={loading}
+        formatLabel={(v) => {
+          if (v === DISH_FILTER_ALL) return 'Tout';
+          const d = DISH_TYPES.find((x) => x.key === v);
+          return d ? `${d.emoji} ${d.label}` : v;
+        }}
       />
 
       <View style={{ marginTop: spacing.md }}>

@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { Text, View, Alert, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Text, View, Alert, Platform, Pressable, StyleSheet } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { supabase } from '../lib/supabase';
 import { spacing } from '../theme/theme';
 
 function notify(title, message) {
@@ -26,13 +27,31 @@ export default function SignUpScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Liste des admins/éditeurs à sélectionner comme parrain
+  const [editors, setEditors] = useState([]);
+  const [editorId, setEditorId] = useState(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, first_name, role')
+        .in('role', ['admin', 'editor'])
+        .order('username', { ascending: true });
+      setEditors(data || []);
+    })();
+  }, []);
+
+  const selectedEditorName = editors.find((e) => e.id === editorId)?.username
+    || editors.find((e) => e.id === editorId)?.first_name
+    || null;
+
   const validate = () => {
     const e = {};
     if (!firstName.trim()) e.firstName = 'Prénom requis';
     if (!lastName.trim()) e.lastName = 'Nom requis';
     if (!age.trim()) e.age = 'Âge requis';
     else if (isNaN(+age) || +age < 1 || +age > 149) e.age = 'Âge invalide';
-    if (!username.trim()) e.username = "Nom d'utilisateur requis";
+    if (!username.trim()) e.username = 'Pseudo requis';
     else if (username.trim().length < 3) e.username = 'Au moins 3 caractères';
     if (!email.trim()) e.email = 'Email requis';
     else if (!/^\S+@\S+\.\S+$/.test(email.trim())) e.email = 'Email invalide';
@@ -40,6 +59,7 @@ export default function SignUpScreen({ navigation }) {
     else if (password.length < 6) e.password = 'Au moins 6 caractères';
     if (confirm !== password)
       e.confirm = 'Les mots de passe ne correspondent pas';
+    if (!editorId) e.editor = 'Choisissez un parrain';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -51,16 +71,23 @@ export default function SignUpScreen({ navigation }) {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       age: parseInt(age, 10),
+      requestedEditorId: editorId,
     });
     setLoading(false);
     if (error) return notify('Inscription impossible', error.message);
 
+    const parrain = selectedEditorName ? ` à ${selectedEditorName}` : '';
     if (!data?.session) {
       notify(
         'Vérifiez votre email',
-        'Un lien de confirmation vous a été envoyé. Confirmez votre compte puis connectez-vous.'
+        `Votre demande d'inscription a été envoyée${parrain}. Confirmez votre email puis connectez-vous. Vous serez notifié quand votre compte sera activé.`
       );
       navigation.navigate('SignIn');
+    } else {
+      notify(
+        'Demande envoyée',
+        `Votre demande d'inscription a été envoyée${parrain}. Vous serez notifié quand votre compte sera activé.`
+      );
     }
   };
 
@@ -114,7 +141,7 @@ export default function SignUpScreen({ navigation }) {
         </View>
 
         <Input
-          label="Nom d'utilisateur"
+          label="Pseudo"
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
@@ -158,6 +185,59 @@ export default function SignUpScreen({ navigation }) {
           editable={!loading}
           onSubmitEditing={onSubmit}
         />
+
+        <Text style={styles.editorTitle}>Choisir un parrain</Text>
+        <Text style={styles.editorHint}>
+          Un admin ou un éditeur doit valider votre inscription.
+        </Text>
+        {editors.length === 0 ? (
+          <Text style={styles.editorEmpty}>Aucun parrain disponible.</Text>
+        ) : (
+          <View style={styles.editorList}>
+            {editors.map((ed) => {
+              const name = ed.username || ed.first_name || 'Membre';
+              const active = editorId === ed.id;
+              return (
+                <Pressable
+                  key={ed.id}
+                  onPress={() => setEditorId(ed.id)}
+                  disabled={loading}
+                  style={({ pressed }) => [
+                    styles.editorCard,
+                    active && styles.editorCardActive,
+                    pressed && !loading && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.editorName,
+                      active && styles.editorNameActive,
+                    ]}
+                  >
+                    {name}
+                  </Text>
+                  <View
+                    style={[
+                      styles.roleBadge,
+                      ed.role === 'admin'
+                        ? styles.roleBadgeAdmin
+                        : styles.roleBadgeEditor,
+                    ]}
+                  >
+                    <Text style={styles.roleBadgeText}>
+                      {ed.role === 'admin' ? 'Admin' : 'Éditeur'}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+        {errors.editor ? (
+          <Text style={styles.editorError}>{errors.editor}</Text>
+        ) : null}
+
+        <View style={{ height: spacing.md }} />
         <Button title="S'inscrire" onPress={onSubmit} loading={loading} />
         <View style={{ height: spacing.md }} />
         <Button
@@ -206,4 +286,57 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  editorTitle: {
+    marginTop: spacing.lg,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  editorHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    marginBottom: spacing.sm,
+  },
+  editorEmpty: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  editorList: { gap: 8 },
+  editorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  editorCardActive: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  editorName: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  editorNameActive: { color: colors.primary },
+  editorError: {
+    marginTop: 6,
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  roleBadgeAdmin: { backgroundColor: '#FF6B35' },
+  roleBadgeEditor: { backgroundColor: '#3498DB' },
+  roleBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
 });

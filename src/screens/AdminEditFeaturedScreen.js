@@ -6,9 +6,13 @@ import Button from '../components/Button';
 import ChipGroup from '../components/ChipGroup';
 import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
+import RecipeEmoji from '../components/RecipeEmoji';
+import EmojiPicker from '../components/EmojiPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { generateRecipe } from '../lib/ai';
+import { getCountryFlag } from '../lib/countryFlags';
+import { DISH_TYPES } from '../lib/dishTypes';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing } from '../theme/theme';
 
@@ -46,9 +50,13 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const existing = route?.params?.recipe ?? null;
   const presetCuisine = route?.params?.presetCuisine ?? null;
+  const presetTitle = route?.params?.presetTitle ?? '';
+  const presetDescription = route?.params?.presetDescription ?? '';
 
-  const [title, setTitle] = useState(existing?.title ?? '');
-  const [description, setDescription] = useState(existing?.description ?? '');
+  const [title, setTitle] = useState(existing?.title ?? presetTitle);
+  const [description, setDescription] = useState(
+    existing?.description ?? presetDescription
+  );
   const [ingredients, setIngredients] = useState(existing?.ingredients ?? '');
   const [steps, setSteps] = useState(existing?.steps ?? '');
   const [servings, setServings] = useState(
@@ -69,6 +77,9 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
   );
   const [fatType, setFatType] = useState(existing?.fat_type ?? '');
   const [cookingType, setCookingType] = useState(existing?.cooking_type ?? '');
+  const [dishType, setDishType] = useState(existing?.dish_type ?? '');
+  const [customEmoji, setCustomEmoji] = useState(existing?.custom_emoji ?? null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,6 +119,7 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
         setCookingTemp(String(result.cooking_temp));
       if (result.cooking_type) setCookingType(result.cooking_type);
       if (result.fat_type) setFatType(result.fat_type);
+      if (result.dish_type) setDishType(result.dish_type);
     } catch (err) {
       notify('Génération impossible', err.message || 'Erreur');
     } finally {
@@ -131,6 +143,8 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
       cuisine: effectiveCuisine,
       fat_type: fatType || null,
       cooking_type: cookingType || null,
+      dish_type: dishType || 'tout',
+      custom_emoji: customEmoji || null,
       featured: true,
       generated_by_ai: false,
     };
@@ -162,6 +176,25 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
         {existing ? 'Modifier la recette' : 'Nouvelle recette du catalogue'}
       </Text>
 
+      <Text style={styles.sectionLabel}>Emoji</Text>
+      <Pressable
+        onPress={() => setEmojiPickerOpen(true)}
+        style={({ pressed }) => [
+          styles.emojiField,
+          pressed && { opacity: 0.85 },
+        ]}
+        accessibilityLabel="Choisir un emoji"
+      >
+        <RecipeEmoji
+          title={title || 'Recette'}
+          customEmoji={customEmoji}
+          size={32}
+        />
+        <Text style={styles.emojiFieldHint}>
+          {customEmoji ? 'Emoji personnalisé' : 'Emoji automatique — taper pour personnaliser'}
+        </Text>
+      </Pressable>
+
       <Text style={styles.sectionLabel}>Cuisine *</Text>
       <ChipGroup
         options={CUISINES}
@@ -171,6 +204,7 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
           if (v) setCuisineOther('');
         }}
         disabled={generating || saving}
+        formatLabel={(v) => `${getCountryFlag(v)} ${v}`}
       />
       <Input
         value={cuisineOther}
@@ -182,6 +216,18 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
         error={errors.cuisine}
         editable={!generating && !saving}
         maxLength={40}
+      />
+
+      <Text style={styles.sectionLabel}>Type de plat</Text>
+      <ChipGroup
+        options={DISH_TYPES.map((d) => d.key)}
+        value={dishType}
+        onChange={(v) => setDishType(v)}
+        disabled={generating || saving}
+        formatLabel={(v) => {
+          const d = DISH_TYPES.find((x) => x.key === v);
+          return d ? `${d.emoji} ${d.label}` : v;
+        }}
       />
 
       <View style={styles.aiBox}>
@@ -338,6 +384,13 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
           disabled={saving}
         />
       </View>
+
+      <EmojiPicker
+        visible={emojiPickerOpen}
+        onClose={() => setEmojiPickerOpen(false)}
+        onSelect={(v) => setCustomEmoji(v)}
+        current={customEmoji}
+      />
     </Screen>
   );
 }
@@ -355,6 +408,23 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.text,
     marginBottom: 6,
     marginTop: spacing.sm,
+  },
+  emojiField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+  },
+  emojiFieldHint: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   multiline: { minHeight: 80, paddingTop: spacing.md },
   multilineLarge: { minHeight: 140, paddingTop: spacing.md },
@@ -379,5 +449,5 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  aiBtnText: { color: colors.surface, fontSize: 14, fontWeight: '700' },
+  aiBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 });

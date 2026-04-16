@@ -86,7 +86,7 @@ function RecipeCard({ recipe, fridge, onAddAll, adding, styles, typography }) {
   return (
     <View style={styles.recipeCard}>
       <View style={styles.recipeTitleRow}>
-        <RecipeEmoji title={recipe.title} size={24} />
+        <RecipeEmoji recipe={recipe} size={24} />
         <Text style={styles.recipeTitle} numberOfLines={2}>
           {recipe.title}
         </Text>
@@ -694,7 +694,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   circleCheck: {
-    color: colors.surface,
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 16,
@@ -771,7 +771,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  addAllText: { color: colors.surface, fontWeight: '700', fontSize: 14 },
+  addAllText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 
   center: {
     flex: 1,
@@ -801,7 +801,7 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  finishBtnText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
+  finishBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
   // Modal
   modalBackdrop: {
@@ -827,7 +827,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   modalBtnCancel: { backgroundColor: colors.border },
-  modalBtnText: { color: colors.surface, fontSize: 16, fontWeight: '700' },
+  modalBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
   // Historique
   historyWrap: {
