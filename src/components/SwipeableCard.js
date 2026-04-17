@@ -1,46 +1,31 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   View,
-  Text,
   Pressable,
   StyleSheet,
   Animated,
   PanResponder,
-  Alert,
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
 
-const SWIPE_WIDTH = 80;
-const SWIPE_THRESHOLD = 50;
+const ACTIVATION_DISTANCE = 4; // seuil minimal de mouvement pour activer
+const DIRECTIONAL_RATIO = 1.4; // dx doit être au moins 1.4x plus grand que dy
 
-function confirmDialog(title, message) {
-  if (Platform.OS === 'web') {
-    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Supprimer', style: 'destructive', onPress: () => resolve(true) },
-    ]);
-  });
-}
-
-// Composant générique swipe-to-delete. Utilisé par RecipesScreen et FridgeScreen.
+// Composant générique swipe-to-delete (style Apple Mail).
 // Props :
-//   id            — identifiant unique de la carte
-//   openCardId    — id de la carte actuellement ouverte (parent)
-//   onOpenChange  — (id|null) => void, notifie le parent de l'ouverture
-//   onDelete      — () => void, appelé après confirmation
-//   onPress       — () => void, optionnel, tap sur la carte (fermée)
-//   confirmTitle  — texte de la popup (défaut "Supprimer cet élément ?")
-//   confirmMessage— sous-texte (défaut "Cette action est définitive.")
+//   onDelete      — () => void, appelé après full swipe
+//   onPress       — () => void, optionnel, tap sur la carte
+//   confirmTitle  — conservé pour compatibilité (non utilisé)
+//   confirmMessage— conservé pour compatibilité (non utilisé)
 //   borderRadius  — rayon du wrap (défaut 14)
 //   children      — contenu de la carte
 export default function SwipeableCard({
+  /* deprecated, kept for backward compatibility */
   id,
+  /* deprecated, kept for backward compatibility */
   openCardId,
+  /* deprecated, kept for backward compatibility */
   onOpenChange,
   onDelete,
   onPress,
@@ -50,38 +35,24 @@ export default function SwipeableCard({
   children,
   style,
 }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
   const translateX = useRef(new Animated.Value(0)).current;
-  const fullSwipeLimit = screenWidth * 0.6;
-  const isOpen = openCardId === id;
+  const fullSwipeLimit = screenWidth * 0.5;
 
-  useEffect(() => {
-    if (!isOpen) {
-      Animated.spring(translateX, {
-        toValue: 0,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 80,
-      }).start();
-    }
-  }, [isOpen, translateX]);
-
-  const confirmFullSwipeDelete = async () => {
-    const ok = await confirmDialog(confirmTitle, confirmMessage);
-    if (ok) {
-      onDelete();
-    } else {
-      Animated.spring(translateX, {
-        toValue: 0,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 80,
-      }).start();
-      onOpenChange(null);
-    }
-  };
+  // Interpolation : |translateX| de 0 à fullSwipeLimit → fond progressif
+  const backgroundColor = translateX.interpolate({
+    inputRange: [
+      -fullSwipeLimit,
+      -fullSwipeLimit * 0.5,
+      0
+    ],
+    outputRange: [
+      '#E74C3C',  // rouge vif à 50% de swipe
+      '#F39C7F',  // rouge orangé à 25%
+      '#EFEFEF'   // gris clair à 0%
+    ],
+    extrapolate: 'clamp',
+  });
 
   const triggerFullSwipe = () => {
     Animated.timing(translateX, {
@@ -89,23 +60,26 @@ export default function SwipeableCard({
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
-      confirmFullSwipeDelete();
+      onDelete();
     });
   };
 
   const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        // N'intercepte pas les taps (laisse les enfants recevoir onPress)
+    () => {
+      const shouldCaptureSwipe = (g) => {
+        const absDx = Math.abs(g.dx);
+        const absDy = Math.abs(g.dy);
+        if (absDx <= ACTIVATION_DISTANCE) return false;
+        if (absDx <= DIRECTIONAL_RATIO * absDy) return false;
+        if (g.dx >= 0) return false;
+        return true;
+      };
+      return PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onStartShouldSetPanResponderCapture: () => false,
-        // Vole le geste dès qu'un drag horizontal démarre
-        onMoveShouldSetPanResponder: (_, g) =>
-          Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-        onMoveShouldSetPanResponderCapture: (_, g) =>
-          Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+        onMoveShouldSetPanResponder: (_, g) => shouldCaptureSwipe(g),
+        onMoveShouldSetPanResponderCapture: (_, g) => shouldCaptureSwipe(g),
         onPanResponderMove: (e, g) => {
-          // Sur web, empêche le navigateur de scroller pendant un drag horizontal
           if (
             Platform.OS === 'web' &&
             e?.nativeEvent &&
@@ -114,12 +88,12 @@ export default function SwipeableCard({
             if (typeof e.preventDefault === 'function') e.preventDefault();
             if (typeof e.stopPropagation === 'function') e.stopPropagation();
           }
-          const base = isOpen ? -SWIPE_WIDTH : 0;
+          const base = 0;
           const next = Math.max(-screenWidth, Math.min(0, base + g.dx));
           translateX.setValue(next);
         },
         onPanResponderRelease: (_, g) => {
-          const base = isOpen ? -SWIPE_WIDTH : 0;
+          const base = 0;
           const final = base + g.dx;
 
           if (Math.abs(final) > fullSwipeLimit) {
@@ -127,65 +101,39 @@ export default function SwipeableCard({
             return;
           }
 
-          const shouldOpen = final < -SWIPE_THRESHOLD;
           Animated.spring(translateX, {
-            toValue: shouldOpen ? -SWIPE_WIDTH : 0,
+            toValue: 0,
             useNativeDriver: true,
             friction: 8,
             tension: 80,
           }).start();
-          if (shouldOpen && !isOpen) onOpenChange(id);
-          else if (!shouldOpen && isOpen) onOpenChange(null);
         },
         onPanResponderTerminate: () => {
           Animated.spring(translateX, {
-            toValue: isOpen ? -SWIPE_WIDTH : 0,
+            toValue: 0,
             useNativeDriver: true,
             friction: 8,
             tension: 80,
           }).start();
         },
-      }),
-    [isOpen, id, onOpenChange, translateX, fullSwipeLimit, screenWidth]
+      });
+    },
+    [translateX, fullSwipeLimit, screenWidth]
   );
 
-  const handleTapDelete = async () => {
-    const ok = await confirmDialog(confirmTitle, confirmMessage);
-    if (!ok) return;
-    onDelete();
-  };
-
   const handleCardPress = () => {
-    if (isOpen) {
-      onOpenChange(null);
-      return;
-    }
     if (onPress) onPress();
   };
 
-  // Sur web, "touch-action: pan-y" dit au navigateur : le scroll vertical est
-  // à lui, mais les gestes horizontaux nous reviennent (pas de capture native
-  // qui bloquerait PanResponder).
   const webTouchAction =
     Platform.OS === 'web' ? { touchAction: 'pan-y' } : null;
 
   return (
     <View style={[styles.wrap, { borderRadius }, webTouchAction, style]}>
-      <Pressable
-        onPress={handleTapDelete}
-        style={[
-          styles.deleteBtn,
-          {
-            borderTopRightRadius: borderRadius,
-            borderBottomRightRadius: borderRadius,
-          },
-        ]}
-        accessibilityLabel="Supprimer"
-      >
-        <Text style={styles.deleteIcon}>🗑️</Text>
-        <Text style={styles.deleteLabel}>Suppr.</Text>
-      </Pressable>
-
+      <Animated.View
+        style={[styles.backgroundLayer, { backgroundColor, borderRadius }]}
+        pointerEvents="none"
+      />
       <Animated.View
         style={[{ transform: [{ translateX }] }, webTouchAction]}
         {...panResponder.panHandlers}
@@ -200,23 +148,17 @@ export default function SwipeableCard({
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
+const styles = StyleSheet.create({
   wrap: {
     width: '100%',
     position: 'relative',
     overflow: 'hidden',
   },
-  deleteBtn: {
+  backgroundLayer: {
     position: 'absolute',
-    right: 0,
     top: 0,
+    left: 0,
+    right: 0,
     bottom: 0,
-    width: SWIPE_WIDTH,
-    backgroundColor: colors.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
   },
-  deleteIcon: { fontSize: 22 },
-  deleteLabel: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 });

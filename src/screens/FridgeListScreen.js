@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Text,
   View,
@@ -13,15 +13,17 @@ import {
   Modal,
   KeyboardAvoidingView,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import SwipeableCard from '../components/SwipeableCard';
 import FadeInView from '../components/FadeInView';
 import { useTheme } from '../contexts/ThemeContext';
 import { radius, spacing, maxContentWidth } from '../theme/theme';
+import { getIngredientEmoji } from '../lib/ingredientEmoji';
 
 const UNITS = ['g', 'kg', 'L', 'ml', 'unité'];
 
@@ -42,22 +44,34 @@ function confirmDialog(title, message) {
   });
 }
 
-function FridgeRowContent({ item, onChangeQty, onQuickDelete, styles, colors }) {
+function FridgeRowContent({ item, onChangeQty, styles, colors }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(item.quantity));
+  const [draft, setDraft] = useState(item.quantity != null ? String(item.quantity) : '');
 
   const save = () => {
     setEditing(false);
-    const n = Number(draft.replace(',', '.'));
-    if (isNaN(n) || n < 0) {
-      setDraft(String(item.quantity));
+    const trimmed = draft.trim();
+    // Si champ vide → on remet null (quantity optionnelle retirée)
+    if (trimmed === '') {
+      if (item.quantity != null) onChangeQty(item, null);
       return;
     }
-    if (n !== Number(item.quantity)) onChangeQty(item, n);
+    const n = Number(trimmed.replace(',', '.'));
+    if (isNaN(n) || n < 0) {
+      // Reset draft à la valeur actuelle
+      setDraft(item.quantity != null ? String(item.quantity) : '');
+      return;
+    }
+    // Comparaison qui gère le cas null
+    const current = item.quantity == null ? null : Number(item.quantity);
+    if (n !== current) onChangeQty(item, n);
   };
 
   return (
     <View style={styles.card}>
+      <Text style={styles.cardEmoji}>
+        {getIngredientEmoji(item.name)}
+      </Text>
       <Text style={styles.cardName} numberOfLines={1}>
         {item.name}
       </Text>
@@ -74,8 +88,9 @@ function FridgeRowContent({ item, onChangeQty, onQuickDelete, styles, colors }) 
             autoFocus
             selectTextOnFocus
             returnKeyType="done"
+            placeholder=""
           />
-        ) : (
+        ) : item.quantity != null ? (
           <Pressable
             onPress={() => {
               setDraft(String(item.quantity));
@@ -86,49 +101,50 @@ function FridgeRowContent({ item, onChangeQty, onQuickDelete, styles, colors }) 
           >
             <Text style={styles.qtyBadgeText}>{item.quantity}</Text>
           </Pressable>
-        )}
-        <Text style={styles.unitText}>{item.unit}</Text>
-      </View>
-
-      <Pressable
-        onPress={() => onQuickDelete(item)}
-        style={styles.trashHit}
-        accessibilityLabel={`Supprimer ${item.name}`}
-        hitSlop={6}
-      >
-        {({ pressed }) => (
-          <Text
-            style={[
-              styles.trashIcon,
-              { color: pressed ? colors.danger : colors.textHint },
-            ]}
+        ) : (
+          <Pressable
+            onPress={() => {
+              setDraft('');
+              setEditing(true);
+            }}
+            hitSlop={6}
+            style={styles.qtyAddBtn}
           >
-            ×
-          </Text>
+            <Text style={styles.qtyAddText}>+</Text>
+          </Pressable>
         )}
-      </Pressable>
+        {item.quantity != null && (
+          <Text style={styles.unitText}>{item.unit}</Text>
+        )}
+      </View>
     </View>
   );
 }
 
 function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
   const [name, setName] = useState('');
-  const [qty, setQty] = useState('1');
+  const [qty, setQty] = useState('');
   const [unit, setUnit] = useState('unité');
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
     setName('');
-    setQty('1');
+    setQty('');
     setUnit('unité');
   };
 
   const submit = async () => {
     if (!name.trim()) return;
-    const n = Number(qty.replace(',', '.'));
-    if (isNaN(n) || n < 0) return;
+    // Quantité optionnelle : si vide ou invalide → null
+    let quantity = null;
+    if (qty.trim() !== '') {
+      const n = Number(qty.replace(',', '.'));
+      if (!isNaN(n) && n >= 0) {
+        quantity = n;
+      }
+    }
     setSaving(true);
-    const ok = await onAdd({ name: name.trim(), quantity: n, unit });
+    const ok = await onAdd({ name: name.trim(), quantity, unit });
     setSaving(false);
     if (ok) {
       reset();
@@ -170,7 +186,7 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
             <TextInput
               value={qty}
               onChangeText={setQty}
-              placeholder="1"
+              placeholder="Optionnel"
               placeholderTextColor={colors.textHint}
               keyboardType="decimal-pad"
               style={styles.modalInput}
@@ -236,15 +252,21 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
   );
 }
 
-export default function FridgeScreen() {
+export default function FridgeListScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const navigation = useNavigation();
+  const route = useRoute();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [openCardId, setOpenCardId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef(null);
+  const scrollToId = route.params?.scrollToId;
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -274,9 +296,13 @@ export default function FridgeScreen() {
 
   const addItem = async ({ name, quantity, unit }) => {
     if (!user) return false;
+    const payload = { user_id: user.id, name, unit };
+    if (quantity !== null && quantity !== undefined) {
+      payload.quantity = quantity;
+    }
     const { data, error } = await supabase
       .from('fridge_items')
-      .insert({ user_id: user.id, name, quantity, unit })
+      .insert(payload)
       .select('*')
       .single();
     if (error) {
@@ -305,32 +331,104 @@ export default function FridgeScreen() {
     }
   };
 
-  const quickDeleteItem = async (item) => {
-    const ok = await confirmDialog(
-      `Supprimer ${item.name} ?`,
-      'Suppression définitive.'
-    );
-    if (ok) deleteItem(item);
-  };
-
-  const deleteItem = async (item) => {
-    const prev = items;
-    setItems((p) => p.filter((x) => x.id !== item.id));
-    setOpenCardId(null);
+  const performSupabaseDelete = async (item) => {
     const { error } = await supabase
       .from('fridge_items')
       .delete()
       .eq('id', item.id);
     if (error) {
       notify('Suppression impossible', error.message);
-      setItems(prev);
+      setItems((prev) => [item, ...prev]);
     }
   };
+
+  const deleteItem = (item) => {
+    setItems((p) => p.filter((x) => x.id !== item.id));
+    setOpenCardId(null);
+
+    if (pendingDelete?.timeoutId) {
+      clearTimeout(pendingDelete.timeoutId);
+      performSupabaseDelete(pendingDelete.item);
+    }
+
+    const timeoutId = setTimeout(() => {
+      performSupabaseDelete(item);
+      setPendingDelete(null);
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }, 6000);
+
+    setPendingDelete({ item, timeoutId });
+
+    Animated.timing(toastOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const cancelDelete = () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timeoutId);
+    setItems((prev) => [pendingDelete.item, ...prev]);
+    setPendingDelete(null);
+    Animated.timing(toastOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pendingDelete?.timeoutId) {
+        clearTimeout(pendingDelete.timeoutId);
+        performSupabaseDelete(pendingDelete.item);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!scrollToId || loading || items.length === 0) return;
+    const index = items.findIndex((x) => x.id === scrollToId);
+    if (index < 0) {
+      navigation.setParams({ scrollToId: undefined });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.3,
+        });
+      } catch (_) {
+        // ignoré — onScrollToIndexFailed prendra le relais
+      }
+      navigation.setParams({ scrollToId: undefined });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [scrollToId, loading, items, navigation]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerInner}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+            accessibilityLabel="Retour"
+            hitSlop={8}
+          >
+            <Text style={styles.backChevron}>‹</Text>
+          </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Mon Frigo</Text>
             <Text style={styles.headerCount}>
@@ -357,10 +455,22 @@ export default function FridgeScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={items}
           keyExtractor={(it) => it.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onScrollToIndexFailed={(info) => {
+            const offset = info.averageItemLength * info.index;
+            flatListRef.current?.scrollToOffset({ offset, animated: true });
+            setTimeout(() => {
+              flatListRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0.3,
+              });
+            }, 300);
+          }}
           renderItem={({ item, index }) => (
             <FadeInView
               delay={Math.min(index * 50, 500)}
@@ -378,7 +488,6 @@ export default function FridgeScreen() {
                 <FridgeRowContent
                   item={item}
                   onChangeQty={changeQty}
-                  onQuickDelete={quickDeleteItem}
                   styles={styles}
                   colors={colors}
                 />
@@ -411,6 +520,26 @@ export default function FridgeScreen() {
         styles={styles}
         colors={colors}
       />
+
+      {pendingDelete && (
+        <Animated.View
+          style={[styles.toast, { opacity: toastOpacity }]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.toastInner}>
+            <Text style={styles.toastText} numberOfLines={1}>
+              {pendingDelete.item.name} supprimé
+            </Text>
+            <Pressable
+              onPress={cancelDelete}
+              style={styles.toastBtn}
+              hitSlop={10}
+            >
+              <Text style={styles.toastBtnText}>Annuler</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -464,6 +593,21 @@ const createStyles = (colors) => StyleSheet.create({
     lineHeight: 26,
     marginTop: -2,
   },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backChevron: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: colors.text,
+    marginTop: -2,
+  },
 
   // List
   listContent: {
@@ -488,11 +632,14 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    paddingLeft: 16,
-    paddingRight: 38,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     gap: spacing.sm,
     minHeight: 60,
+  },
+  cardEmoji: {
+    fontSize: 22,
+    marginRight: 4,
   },
   cardName: {
     flex: 1,
@@ -518,6 +665,23 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
+  qtyAddBtn: {
+    height: 36,
+    width: 36,
+    backgroundColor: colors.ingredientBg,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  qtyAddText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    lineHeight: 20,
+  },
   qtyInput: {
     width: 50,
     height: 36,
@@ -534,16 +698,6 @@ const createStyles = (colors) => StyleSheet.create({
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   },
   unitText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
-  trashHit: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trashIcon: { fontSize: 16, fontWeight: '600', lineHeight: 18 },
 
   // State
   center: {
@@ -663,6 +817,48 @@ const createStyles = (colors) => StyleSheet.create({
   modalCancelText: {
     color: colors.primary,
     fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Toast "supprimé · Annuler"
+  toast: {
+    position: 'absolute',
+    bottom: 90,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  toastInner: {
+    width: '100%',
+    maxWidth: maxContentWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  toastBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 12,
+  },
+  toastBtnText: {
+    color: colors.primary,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

@@ -109,6 +109,7 @@ export default function AdminEditFeaturedScreen({ route, navigation }) {
         servings: n,
         prompt: aiPrompt || title || 'une recette traditionnelle',
         cuisine: effectiveCuisine || undefined,
+        userId: user?.id,
       });
       if (result.title) setTitle(result.title);
       if (result.description) setDescription(result.description);

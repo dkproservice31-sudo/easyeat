@@ -15,6 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import WebScroll from '../components/WebScroll';
 import RecipeEmoji from '../components/RecipeEmoji';
 import EmojiPicker from '../components/EmojiPicker';
+import AIMonitoringDashboard from '../components/AIMonitoringDashboard';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { generateRecipesBatch, classifyDishType } from '../lib/ai';
@@ -478,6 +479,7 @@ export default function AdminScreen() {
           const dt = await classifyDishType({
             title: r.title,
             ingredients: r.ingredients,
+            userId: user?.id,
           });
           if (dt) {
             const { error: upErr } = await supabase
@@ -737,6 +739,7 @@ export default function AdminScreen() {
           count: n,
           existingTitles,
           onProgress: (done, total) => setGenProgress({ done, total }),
+          userId: user?.id,
         });
 
       // Deuxième filtre de sécurité (au cas où Gemini renvoie quand même un doublon)
@@ -925,6 +928,26 @@ export default function AdminScreen() {
               📋 Inscriptions ({pendingRegs.length})
             </Text>
           </Pressable>
+          {isAdmin && (
+            <Pressable
+              onPress={() => setActiveTab('ai_monitoring')}
+              style={({ pressed }) => [
+                styles.tabBtn,
+                activeTab === 'ai_monitoring' && styles.tabBtnActive,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  activeTab === 'ai_monitoring' && styles.tabBtnTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                🤖 IA
+              </Text>
+            </Pressable>
+          )}
         </ScrollView>
 
         {activeTab === 'recipes' && (
@@ -1599,6 +1622,10 @@ export default function AdminScreen() {
               </View>
             )}
           </>
+        )}
+
+        {activeTab === 'ai_monitoring' && isAdmin && (
+          <AIMonitoringDashboard />
         )}
       </WebScroll>
 

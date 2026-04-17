@@ -24,7 +24,10 @@ import HelpScreen from '../screens/HelpScreen';
 import PendingApprovalScreen from '../screens/PendingApprovalScreen';
 import BannedScreen from '../screens/BannedScreen';
 import EditRecipeScreen from '../screens/EditRecipeScreen';
-import FridgeScreen from '../screens/FridgeScreen';
+import FridgeHomeScreen from '../screens/FridgeHomeScreen';
+import FridgeListScreen from '../screens/FridgeListScreen';
+import RecipeGenerationScreen from '../screens/RecipeGenerationScreen';
+import ScanScreen from '../screens/ScanScreen';
 import ShoppingScreen from '../screens/ShoppingScreen';
 import AIScreen from '../screens/AIScreen';
 import AdminScreen from '../screens/AdminScreen';
@@ -122,6 +125,37 @@ function CustomTabBar({ state, descriptors, navigation }) {
   );
 }
 
+function FridgeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="FridgeHome" component={FridgeHomeScreen} />
+      <Stack.Screen name="FridgeList" component={FridgeListScreen} />
+      <Stack.Screen
+        name="RecipeGeneration"
+        component={RecipeGenerationScreen}
+      />
+      <Stack.Screen
+        name="ScanReceipt"
+        component={ScanScreen}
+        initialParams={{ mode: 'ticket' }}
+      />
+      <Stack.Screen
+        name="ScanFridge"
+        component={ScanScreen}
+        initialParams={{ mode: 'fridge' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function AIStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AIHome" component={AIScreen} />
+    </Stack.Navigator>
+  );
+}
+
 function MainTabs() {
   return (
     <Tabs.Navigator
@@ -130,9 +164,9 @@ function MainTabs() {
     >
       <Tabs.Screen name="Accueil" component={HomeScreen} />
       <Tabs.Screen name="Recettes" component={RecipesScreen} />
-      <Tabs.Screen name="Frigo" component={FridgeScreen} />
+      <Tabs.Screen name="Frigo" component={FridgeStack} />
       <Tabs.Screen name="Courses" component={ShoppingScreen} />
-      <Tabs.Screen name="IA" component={AIScreen} />
+      <Tabs.Screen name="IA" component={AIStack} />
       <Tabs.Screen name="Profil" component={ProfileScreen} />
     </Tabs.Navigator>
   );

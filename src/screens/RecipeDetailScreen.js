@@ -28,6 +28,7 @@ import {
   calculateRecipeMacros,
   askCookAssistant,
 } from '../lib/ai';
+import { AIQuotaExceededError } from '../lib/aiQuota';
 import { getCountryFlag } from '../lib/countryFlags';
 import { clearChatHistory } from '../lib/chatStore';
 import { radius, spacing } from '../theme/theme';
@@ -608,10 +609,17 @@ export default function RecipeDetailScreen({ route, navigation }) {
     setMacrosLoading(true);
     setMacros(null);
     try {
-      const res = await calculateRecipeMacros(recipe);
+      const res = await calculateRecipeMacros(recipe, user?.id);
       setMacros(res);
     } catch (err) {
-      notify('Calcul impossible', err.message || 'Erreur');
+      if (err instanceof AIQuotaExceededError) {
+        notify(
+          'Limite IA atteinte',
+          "Tu as utilisé tes 20 générations IA aujourd'hui. Reviens demain !"
+        );
+      } else {
+        notify('Calcul impossible', err.message || 'Erreur');
+      }
     } finally {
       setMacrosLoading(false);
     }
@@ -674,10 +682,18 @@ export default function RecipeDetailScreen({ route, navigation }) {
       const result = await adjustRecipeServings({
         recipe,
         newServings: parseInt(s, 10),
+        userId: user?.id,
       });
       setAdjusted(result);
     } catch (err) {
-      notify('Adaptation impossible', err.message || 'Erreur');
+      if (err instanceof AIQuotaExceededError) {
+        notify(
+          'Limite IA atteinte',
+          "Tu as utilisé tes 20 générations IA aujourd'hui. Reviens demain !"
+        );
+      } else {
+        notify('Adaptation impossible', err.message || 'Erreur');
+      }
     } finally {
       setAdjusting(false);
     }

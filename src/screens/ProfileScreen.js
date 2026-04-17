@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { analyzeNutritionBalance } from '../lib/ai';
+import { AIQuotaExceededError } from '../lib/aiQuota';
 import { DISH_TYPES, normalizeDishType } from '../lib/dishTypes';
 import { spacing } from '../theme/theme';
 
@@ -130,10 +131,17 @@ export default function ProfileScreen() {
         );
         return;
       }
-      const txt = await analyzeNutritionBalance({ recipes: data });
+      const txt = await analyzeNutritionBalance({ recipes: data, userId: user?.id });
       setNutritionText(txt);
     } catch (err) {
-      notify('Analyse impossible', err.message || 'Erreur');
+      if (err instanceof AIQuotaExceededError) {
+        notify(
+          'Limite IA atteinte',
+          "Tu as utilisé tes 20 générations IA aujourd'hui. Reviens demain !"
+        );
+      } else {
+        notify('Analyse impossible', err.message || 'Erreur');
+      }
     } finally {
       setNutritionLoading(false);
     }
