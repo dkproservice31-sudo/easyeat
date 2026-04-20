@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Text,
   View,
@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Switch,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Screen from '../components/Screen';
@@ -21,6 +22,14 @@ import { supabase } from '../lib/supabase';
 import { analyzeNutritionBalance } from '../lib/ai';
 import { AIQuotaExceededError } from '../lib/aiQuota';
 import { DISH_TYPES, normalizeDishType } from '../lib/dishTypes';
+import {
+  isPushSupported,
+  getPermissionState,
+  isSubscribed as isPushSubscribed,
+  subscribeToPush,
+  unsubscribeFromPush,
+  sendTestNotification,
+} from '../lib/pushNotifications';
 import { spacing } from '../theme/theme';
 
 function StatCard({ emoji, value, label, styles }) {
@@ -29,6 +38,100 @@ function StatCard({ emoji, value, label, styles }) {
       <Text style={styles.statEmoji}>{emoji}</Text>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function NotificationSettings({ userId, styles, colors }) {
+  const [supported, setSupported] = useState(false);
+  const [permissionState, setPermissionState] = useState('default');
+  const [subscribed, setSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const sup = isPushSupported();
+      setSupported(sup);
+      if (sup) {
+        setPermissionState(getPermissionState());
+        setSubscribed(await isPushSubscribed());
+      }
+    })();
+  }, []);
+
+  const handleToggle = async (value) => {
+    setLoading(true);
+    try {
+      if (value) {
+        const ok = await subscribeToPush(userId);
+        if (ok) {
+          setSubscribed(true);
+          setPermissionState('granted');
+        } else {
+          const msg = 'Vérifie que tu as bien autorisé les notifications.';
+          if (Platform.OS === 'web') window.alert(`Activation impossible\n\n${msg}`);
+          else Alert.alert('Activation impossible', msg);
+          setPermissionState(getPermissionState());
+        }
+      } else {
+        await unsubscribeFromPush(userId);
+        setSubscribed(false);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!supported) {
+    return (
+      <View style={styles.notifCard}>
+        <Text style={styles.notifEmoji}>🔔</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.notifTitle}>Notifications</Text>
+          <Text style={styles.notifHintMuted}>
+            Non supportées sur ton appareil. Ajoute EasyEat à ton écran
+            d'accueil depuis Safari (iOS) ou Chrome (Android).
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (permissionState === 'denied') {
+    return (
+      <View style={styles.notifCard}>
+        <Text style={styles.notifEmoji}>🔔</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.notifTitle}>Notifications bloquées</Text>
+          <Text style={styles.notifHintMuted}>
+            Pour les réactiver, va dans les réglages de ton navigateur et
+            autorise les notifications pour EasyEat.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.notifCard}>
+      <Text style={styles.notifEmoji}>🔔</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.notifTitle}>Notifications de péremption</Text>
+        <Text style={styles.notifHint}>
+          Reçois une alerte la veille qu'un ingrédient périme
+        </Text>
+      </View>
+      {loading ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : (
+        <Switch
+          value={subscribed}
+          onValueChange={handleToggle}
+          disabled={loading}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor="#FFFFFF"
+        />
+      )}
     </View>
   );
 }
@@ -76,6 +179,22 @@ export default function ProfileScreen() {
 
   // Modale contact + compteur de messages non lus (admin uniquement)
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [testingNotif, setTestingNotif] = useState(false);
+
+  const handleTestNotification = async () => {
+    setTestingNotif(true);
+    try {
+      const result = await sendTestNotification();
+      if (!result.success) {
+        notify('Test échoué', result.error || 'Erreur inconnue');
+      }
+      // Succès : la notif système elle-même sert de confirmation visuelle
+    } finally {
+      setTestingNotif(false);
+    }
+  };
+
+
   const [contactOpen, setContactOpen] = useState(false);
   const [contactSubject, setContactSubject] = useState('Signaler un bug');
   const [contactMessage, setContactMessage] = useState('');
@@ -211,6 +330,22 @@ export default function ProfileScreen() {
   return (
     <Screen>
       <View style={styles.container}>
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.topBarBack,
+              pressed && { opacity: 0.5 },
+            ]}
+            accessibilityLabel="Retour"
+          >
+            <Text style={styles.topBarChevron}>‹</Text>
+          </Pressable>
+          <Text style={styles.topBarTitle}>Mon profil</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+
         <FadeInView delay={0}>
           <View style={styles.header}>
             <View style={styles.avatar}>
@@ -337,6 +472,44 @@ export default function ProfileScreen() {
             <Text style={styles.infoChevron}>›</Text>
           </Pressable>
         </FadeInView>
+
+        <FadeInView delay={170}>
+          <NotificationSettings
+            userId={user?.id}
+            styles={styles}
+            colors={colors}
+          />
+        </FadeInView>
+
+        {isAdmin ? (
+          <FadeInView delay={175}>
+            <View style={styles.adminCard}>
+              <View style={styles.adminHeaderRow}>
+                <Text style={styles.notifEmoji}>🧪</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.notifTitle}>
+                    Debug notifications (admin)
+                  </Text>
+                  <Text style={styles.notifHintMuted}>
+                    Envoie une notif de test instantanée
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={handleTestNotification}
+                disabled={testingNotif}
+                style={({ pressed }) => [
+                  styles.adminBtn,
+                  (pressed || testingNotif) && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.adminBtnText}>
+                  {testingNotif ? 'Envoi...' : '🔔 Tester une notification'}
+                </Text>
+              </Pressable>
+            </View>
+          </FadeInView>
+        ) : null}
 
         <FadeInView delay={180}>
           <ThemeToggle
@@ -482,7 +655,36 @@ const createStyles = (colors) =>
     container: {
       flex: 1,
       paddingHorizontal: 16,
-      paddingTop: 24,
+      paddingTop: spacing.sm,
+    },
+    topBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing.md,
+    },
+    topBarBack: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    topBarChevron: {
+      fontSize: 24,
+      lineHeight: 24,
+      color: colors.text,
+      marginTop: -2,
+    },
+    topBarTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    topBarSpacer: {
+      width: 36,
     },
     header: { alignItems: 'center' },
     avatar: {
@@ -622,6 +824,64 @@ const createStyles = (colors) =>
       color: colors.primary,
       fontSize: 13,
       fontWeight: '700',
+    },
+
+    notifCard: {
+      marginTop: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 0.5,
+      borderColor: colors.border,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+    },
+    notifEmoji: { fontSize: 22 },
+    notifTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    notifHint: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    notifHintMuted: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+      lineHeight: 16,
+    },
+
+    adminCard: {
+      marginTop: 16,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
+      borderStyle: 'dashed',
+    },
+    adminHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10,
+    },
+    adminBtn: {
+      paddingVertical: 12,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+    },
+    adminBtnText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
     },
 
     themeRow: {

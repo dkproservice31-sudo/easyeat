@@ -522,80 +522,82 @@ CONTRAINTES DE VALEURS :
   return parsed;
 }
 
-// Génère un menu hebdomadaire (7 jours) basé sur le contenu du frigo et
-// les préférences utilisateur. Version "light" : on ne renvoie que
-// titre + description + durée pour chaque repas. Les recettes détaillées
-// (ingrédients / étapes) seront générées à la demande plus tard.
-const DAYS_ORDER = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+// Génère un menu hebdomadaire de 7 dîners (1 par jour, lundi → dimanche).
+// Priorité aux items urgents du frigo (périmant dans ≤ 7 jours) sur les
+// 3 premiers jours pour limiter le gaspillage.
+// Retourne { menu: [{day, recipe: {name, time, servings, ingredients, instructions}}], focusItems: [] }.
+const DAYS_ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
-export async function generateWeeklyMenu(fridgeItems = [], options = {}, userId) {
+export async function generateWeeklyMenu({ fridgeItems = [], userId } = {}) {
   await _checkQuota(userId, 'user', 'generateWeeklyMenu');
   if (!GEMINI_KEY) {
     throw new Error(
       "La génération IA n'est pas disponible pour le moment. Réessayez plus tard."
     );
   }
-  const {
-    mealsPerDay = 2,
-    dietPreference = 'aucune',
-    varietyLevel = 'varié',
-    avoidIngredients = '',
-  } = options;
 
-  const fridgeStr = (fridgeItems || [])
+  // Items urgents : ceux qui périment dans les 7 prochains jours
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const urgentItems = (fridgeItems || []).filter((item) => {
+    if (!item || !item.expiration_date) return false;
+    const exp = new Date(item.expiration_date);
+    exp.setHours(0, 0, 0, 0);
+    const daysLeft = Math.floor((exp - today) / (1000 * 60 * 60 * 24));
+    return daysLeft >= 0 && daysLeft <= 7;
+  });
+
+  const allItemsText = (fridgeItems || [])
     .map((i) => {
-      const qty = i.quantity != null && i.unit
-        ? ` (${i.quantity} ${i.unit})`
-        : '';
+      const qty = i.quantity != null && i.unit ? ` (${i.quantity} ${i.unit})` : '';
       return `- ${i.name}${qty}`;
     })
     .join('\n') || '(aucun ingrédient)';
 
-  const mealsRule = mealsPerDay === 1
-    ? '1 repas par jour (dîner seul). Le champ "lunch" doit être null.'
-    : '2 repas par jour (déjeuner + dîner).';
-
-  const avoidLine = avoidIngredients && avoidIngredients.trim()
-    ? `- N'utilise JAMAIS ces ingrédients : ${avoidIngredients.trim()}`
+  const urgentText = urgentItems.length > 0
+    ? `\n\n⚠️ INGRÉDIENTS À UTILISER EN PRIORITÉ (périment dans ≤ 7 jours) :\n${urgentItems.map((i) => `- ${i.name}`).join('\n')}\nIntègre-les dans les 3 premiers dîners (lundi, mardi, mercredi) si possible.`
     : '';
 
-  const prompt = `Tu es un chef cuisinier et planificateur de menus expert. Génère un menu COMPLET pour 7 jours (lundi à dimanche) basé sur les ingrédients disponibles et les préférences.
+  const prompt = `Tu es un chef cuisinier qui planifie des repas de dîner pour une semaine.
+Génère un menu de 7 dîners (1 par jour, du lundi au dimanche) en utilisant au MAXIMUM les ingrédients disponibles dans le frigo de l'utilisateur.
+
+INGRÉDIENTS DISPONIBLES :
+${allItemsText}${urgentText}
 
 RÈGLES :
-- ${mealsRule}
-- Utilise un maximum des ingrédients du frigo sur l'ensemble de la semaine.
-- Varie les cuisines du monde selon le niveau de variété demandé.
-- Respecte le régime alimentaire : ${dietPreference}.
-${avoidLine}
-- Équilibre nutritionnellement la semaine (évite 7 pâtes ou 7 salades d'affilée).
-- Faisabilité réaliste : pas 7 recettes à 2h de cuisson.
+- 1 recette par jour (dîner uniquement)
+- Chaque recette doit être réaliste et faisable avec majoritairement les ingrédients du frigo (au moins 60% des ingrédients principaux)
+- Varier les cuisines (pas 7 fois la même base)
+- Durée réaliste : entre 15 et 45 minutes
+- Pour chaque ingrédient : indique "in_fridge": true si le nom correspond à un ingrédient du frigo, false sinon (sel, épices, huile, etc.)
 
-INGRÉDIENTS DU FRIGO :
-${fridgeStr}
-
-PRÉFÉRENCES :
-- Repas par jour : ${mealsPerDay}
-- Régime : ${dietPreference}
-- Variété : ${varietyLevel}
-- À éviter : ${avoidIngredients || '(rien)'}
-
-Réponds UNIQUEMENT en JSON strict, sans markdown, sans backticks, sans commentaire avant ou après.
+Réponds UNIQUEMENT en JSON strict, sans markdown, sans backticks, sans commentaire.
 
 Structure EXACTE :
-
 {
-  "title": "Ma semaine gourmande",
-  "meals": [
+  "menu": [
     {
-      "day": "lundi",
-      "lunch": { "title": "...", "description": "...", "duration": 30 },
-      "dinner": { "title": "...", "description": "...", "duration": 45 }
+      "day": "Lundi",
+      "recipe": {
+        "name": "Nom court et appétissant",
+        "time": "30 min",
+        "servings": 2,
+        "ingredients": [
+          { "name": "Tomate", "quantity": 2, "unit": "unité", "in_fridge": true },
+          { "name": "Huile d'olive", "quantity": 2, "unit": "cuil. à soupe", "in_fridge": false }
+        ],
+        "instructions": [
+          "Étape 1...",
+          "Étape 2..."
+        ]
+      }
     }
-  ]
+  ],
+  "focusItems": ["nom item urgent 1", "nom item urgent 2"]
 }
 
-Le tableau "meals" doit contenir EXACTEMENT 7 entrées dans l'ordre lundi, mardi, mercredi, jeudi, vendredi, samedi, dimanche.
-Pour chaque repas : "duration" est un entier en minutes, "title" est court et appétissant, "description" tient en 1 phrase.
+Le tableau "menu" doit contenir EXACTEMENT 7 entrées dans l'ordre Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi, Dimanche.
+Le tableau "focusItems" liste les noms des ingrédients urgents que tu as intégrés dans les recettes (vide si aucun ingrédient urgent).
 Réponds en français.`;
 
   const data = await geminiFetch({
@@ -611,36 +613,56 @@ Réponds en français.`;
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/```\s*$/i, '');
+
   let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch {
     throw new Error('Une erreur est survenue. Réessayez.');
   }
-  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.meals)) {
-    throw new Error('Une erreur est survenue. Réessayez.');
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.menu)) {
+    throw new Error('Format de menu invalide.');
   }
 
-  // Garde-fou : forcer l'ordre des jours et compléter les manquants.
-  // Gemini est fiable mais on ne veut JAMAIS crasher l'UI.
+  // Garde-fou : forcer l'ordre des 7 jours, tolérer la casse côté Gemini
   const byDay = {};
-  for (const m of parsed.meals) {
-    if (m && typeof m.day === 'string') {
-      byDay[m.day.toLowerCase().trim()] = m;
+  for (const entry of parsed.menu) {
+    if (entry && typeof entry.day === 'string') {
+      const key = entry.day.trim().toLowerCase();
+      byDay[key] = entry;
     }
   }
-  parsed.meals = DAYS_ORDER.map((day) => {
-    const m = byDay[day] || {};
+  const normalizedMenu = DAYS_ORDER.map((day) => {
+    const entry = byDay[day.toLowerCase()] || {};
+    const recipe = entry.recipe || {};
     return {
       day,
-      lunch: mealsPerDay === 1 ? null : (m.lunch || null),
-      dinner: m.dinner || null,
+      recipe: {
+        name: typeof recipe.name === 'string' ? recipe.name : 'Recette du jour',
+        time: typeof recipe.time === 'string' ? recipe.time : '30 min',
+        servings: Number(recipe.servings) > 0 ? Number(recipe.servings) : 2,
+        ingredients: Array.isArray(recipe.ingredients)
+          ? recipe.ingredients
+              .filter((ing) => ing && typeof ing.name === 'string')
+              .map((ing) => ({
+                name: ing.name,
+                quantity: ing.quantity ?? null,
+                unit: typeof ing.unit === 'string' ? ing.unit : null,
+                in_fridge: ing.in_fridge === true,
+              }))
+          : [],
+        instructions: Array.isArray(recipe.instructions)
+          ? recipe.instructions.filter((s) => typeof s === 'string' && s.trim())
+          : [],
+      },
     };
   });
-  if (!parsed.title || typeof parsed.title !== 'string') {
-    parsed.title = 'Ma semaine gourmande';
-  }
-  return parsed;
+
+  const focusItems = Array.isArray(parsed.focusItems)
+    ? parsed.focusItems.filter((s) => typeof s === 'string' && s.trim())
+    : [];
+
+  return { menu: normalizedMenu, focusItems };
 }
 
 // Analyse une image via Gemini Vision (gemini-2.5-flash accepte les images
@@ -736,7 +758,24 @@ async function _scanImage({ prompt, logPrefix, imageBase64, mimeType = 'image/jp
       const confidence = ['high', 'medium', 'low'].includes(it.confidence)
         ? it.confidence
         : 'medium';
-      return { name, quantity, unit, confidence };
+      // shelf_life_days : Gemini renvoie un entier en jours (ou null).
+      // Filet de sécurité : on refuse valeurs négatives ou aberrantes (> 10 ans).
+      let shelfLifeDays = it.shelf_life_days;
+      if (typeof shelfLifeDays === 'string') {
+        const n = parseInt(shelfLifeDays, 10);
+        shelfLifeDays = isNaN(n) ? null : n;
+      }
+      if (
+        typeof shelfLifeDays !== 'number' ||
+        !Number.isFinite(shelfLifeDays) ||
+        shelfLifeDays < 0 ||
+        shelfLifeDays > 3650
+      ) {
+        shelfLifeDays = null;
+      } else {
+        shelfLifeDays = Math.round(shelfLifeDays);
+      }
+      return { name, quantity, unit, confidence, shelf_life_days: shelfLifeDays };
     })
     .filter(Boolean);
 
@@ -752,7 +791,7 @@ export async function scanReceipt(imageBase64, mimeType = 'image/jpeg', userId) 
 
   const prompt = `Tu es un assistant qui analyse des tickets de caisse de supermarché.
 
-Je te montre une photo d'un ticket de caisse. Ta mission : identifier UNIQUEMENT les produits alimentaires achetés, avec leurs quantités précises si indiquées.
+Je te montre une photo d'un ticket de caisse. Ta mission : identifier UNIQUEMENT les produits alimentaires achetés, avec leurs quantités précises si indiquées, ET estimer une durée de conservation raisonnable pour chaque produit.
 
 RÈGLES IMPORTANTES :
 - Ignore TOUS les produits non-alimentaires (sacs, produits ménagers, hygiène, électronique, etc.)
@@ -761,16 +800,44 @@ RÈGLES IMPORTANTES :
   * La quantité numérique si visible (poids, volume, nombre d'unités)
   * L'unité (g, kg, ml, L, unité)
   * Ton niveau de confiance : "high", "medium" ou "low" selon la lisibilité
+  * Une DURÉE DE CONSERVATION RAISONNABLE en jours (shelf_life_days) en supposant que l'aliment vient d'être acheté ou ouvert aujourd'hui. Utilise des estimations CONSERVATRICES (plutôt courtes que trop optimistes) pour la sécurité alimentaire.
 - Si un produit alimentaire affiche une MULTIPLICATION (ex: "LAIT DEMI ECREMEE x3", "YAOURT x 2", "OEUFS X2"), mets quantity = ce nombre et unit = "unité".
 - Si le produit est clairement alimentaire mais la quantité/unité est ambiguë, mets quantity = null et unit = null.
 - Si le ticket est illisible, partiel, ou ne semble pas être un ticket de caisse, retourne un tableau vide [].
 
+DURÉES DE CONSERVATION INDICATIVES (en jours, ajuste selon le produit) :
+- Viandes crues (boeuf, porc, agneau) : 2-3
+- Volaille crue (poulet, dinde) : 2
+- Poisson frais : 1-2
+- Fruits de mer : 1
+- Charcuterie ouverte (jambon, saucisson tranché) : 5
+- Charcuterie sous vide non ouverte : 14-21
+- Fruits frais : 5-7 (fruits rouges 3)
+- Légumes frais : 5-10
+- Herbes aromatiques fraîches : 5-7
+- Produits laitiers (lait, yaourts, fromage frais) : 7-21
+- Fromages à pâte dure : 30-60
+- Œufs : 28
+- Pain : 3-5
+- Pâtes, riz, céréales secs : 365-730
+- Conserves : 730-1095
+- Huiles, vinaigres, condiments : 180-730
+- Chocolat, biscuits : 180
+- Boissons (jus, sodas scellés) : 180 ; ouverts 7
+- Surgelés : 90-180
+
+Règles de décision rapide :
+- Conserve / paquet sec / bocal scellé → shelf_life_days élevé (180+)
+- Produit clairement frais → shelf_life_days court (2-7)
+- Incertain → estimation prudente (plus courte)
+- Impossible à estimer → shelf_life_days: null
+
 Réponds UNIQUEMENT en JSON strict, sans markdown, sans backticks, sans commentaire avant ou après. Format :
 
 [
-  { "name": "viande hachée", "quantity": 500, "unit": "g", "confidence": "high" },
-  { "name": "œufs", "quantity": 6, "unit": "unité", "confidence": "high" },
-  { "name": "lait demi-écrémé", "quantity": 1, "unit": "L", "confidence": "medium" }
+  { "name": "viande hachée", "quantity": 500, "unit": "g", "confidence": "high", "shelf_life_days": 2 },
+  { "name": "œufs", "quantity": 6, "unit": "unité", "confidence": "high", "shelf_life_days": 28 },
+  { "name": "conserve tomates pelées", "quantity": 1, "unit": "unité", "confidence": "high", "shelf_life_days": 730 }
 ]
 
 Tableau vide [] si rien d'alimentaire détecté.`;
@@ -788,7 +855,7 @@ export async function scanFridge(imageBase64, mimeType = 'image/jpeg', userId) {
 
   const prompt = `Tu es un assistant qui analyse des photos de frigo pour identifier les aliments visibles.
 
-Je te montre une photo de l'intérieur d'un frigo ouvert. Ta mission : identifier tous les aliments CLAIREMENT VISIBLES et identifiables.
+Je te montre une photo de l'intérieur d'un frigo ouvert. Ta mission : identifier tous les aliments CLAIREMENT VISIBLES et identifiables, ET estimer une durée de conservation raisonnable pour chacun.
 
 RÈGLES IMPORTANTES :
 - Identifie uniquement les aliments que tu peux reconnaître AVEC CERTITUDE (pas de suppositions hasardeuses sur des contenants fermés sans étiquette)
@@ -801,6 +868,7 @@ RÈGLES IMPORTANTES :
     - 'ml' ou 'L' pour les liquides (1L lait, 50cl crème)
     - null si impossible à estimer
   * Ton niveau de confiance : 'high', 'medium', ou 'low' selon la clarté de l'identification
+  * Une DURÉE DE CONSERVATION RAISONNABLE en jours (shelf_life_days) en supposant que l'aliment vient d'être acheté ou ouvert aujourd'hui. Utilise des estimations CONSERVATRICES (plutôt courtes que trop optimistes) pour la sécurité alimentaire.
 
 - Ne devine PAS le contenu de pots/contenants fermés sans étiquette visible
 - Ignore les emballages vides, les éléments du frigo lui-même (clayettes, bacs), et les non-aliments
@@ -808,12 +876,39 @@ RÈGLES IMPORTANTES :
 
 - Sois conservateur sur les quantités : en cas de doute, préfère null plutôt qu'un mauvais chiffre. L'utilisateur corrigera lui-même.
 
+DURÉES DE CONSERVATION INDICATIVES (en jours, ajuste selon le produit) :
+- Viandes crues (boeuf, porc, agneau) : 2-3
+- Volaille crue (poulet, dinde) : 2
+- Poisson frais : 1-2
+- Fruits de mer : 1
+- Charcuterie ouverte (jambon, saucisson tranché) : 5
+- Charcuterie sous vide non ouverte : 14-21
+- Fruits frais : 5-7 (fruits rouges 3)
+- Légumes frais : 5-10
+- Herbes aromatiques fraîches : 5-7
+- Produits laitiers (lait, yaourts, fromage frais) : 7-21
+- Fromages à pâte dure : 30-60
+- Œufs : 28
+- Pain : 3-5
+- Pâtes, riz, céréales secs : 365-730
+- Conserves : 730-1095
+- Huiles, vinaigres, condiments : 180-730
+- Chocolat, biscuits : 180
+- Boissons (jus, sodas scellés) : 180 ; ouverts 7
+- Surgelés : 90-180
+
+Règles de décision rapide :
+- Conserve / paquet sec / bocal scellé → shelf_life_days élevé (180+)
+- Produit clairement frais → shelf_life_days court (2-7)
+- Incertain → estimation prudente (plus courte)
+- Impossible à estimer → shelf_life_days: null
+
 Réponds UNIQUEMENT en JSON strict, pas de markdown, pas de commentaires. Format :
 
 [
-  { "name": "tomates cerises", "quantity": 8, "unit": "unité", "confidence": "high" },
-  { "name": "lait", "quantity": 1, "unit": "L", "confidence": "high" },
-  { "name": "fromage blanc", "quantity": null, "unit": null, "confidence": "medium" }
+  { "name": "tomates cerises", "quantity": 8, "unit": "unité", "confidence": "high", "shelf_life_days": 7 },
+  { "name": "lait", "quantity": 1, "unit": "L", "confidence": "high", "shelf_life_days": 7 },
+  { "name": "fromage blanc", "quantity": null, "unit": null, "confidence": "medium", "shelf_life_days": 14 }
 ]
 
 Tableau vide [] si rien d'identifiable détecté.`;
@@ -849,4 +944,154 @@ Garde exactement le même titre, la même description, les mêmes étapes, la m�
     cooking_type: recipe.cooking_type ?? result.cooking_type,
     fat_type: recipe.fat_type ?? result.fat_type,
   };
+}
+
+// Analyse une recette et génère la MISE EN PLACE (tâches de prep
+// avant cuisson : couper, peser, mesurer, préchauffer, sortir du
+// frigo, etc.). Retour cacheable en DB pour ne pas re-appeler Gemini.
+// - recipe : objet avec title, ingredients (text multi-lignes), steps (text multi-lignes)
+// - userId : pour _checkQuota
+// Retourne { tasks: [{ id, description, emoji }] }
+export async function generateMisePlace({ recipe, userId }) {
+  await _checkQuota(userId, 'user', 'generateMisePlace');
+  if (!GEMINI_KEY) {
+    throw new Error(
+      "La génération IA n'est pas disponible pour le moment. Réessayez plus tard."
+    );
+  }
+  if (!recipe || !recipe.title) {
+    throw new Error('Recette invalide.');
+  }
+
+  const ingredientsText = (recipe.ingredients || '').trim() || '(aucun)';
+  const stepsText = (recipe.steps || '').trim() || '(aucune)';
+
+  const prompt = `Tu es un chef cuisinier professionnel qui analyse une recette pour deux missions :
+1) Préparer la MISE EN PLACE (tâches avant cuisson)
+2) Extraire les DURÉES de chaque étape de cuisson pour alimenter un minuteur
+
+RECETTE : ${recipe.title}
+
+INGRÉDIENTS :
+${ingredientsText}
+
+ÉTAPES DE CUISSON :
+${stepsText}
+
+════════════════════════════════════════
+MISSION 1 — MISE EN PLACE
+════════════════════════════════════════
+Génère la liste complète des tâches de PRÉPARATION à faire AVANT de commencer à cuisiner.
+
+RÈGLES MISE EN PLACE :
+- Uniquement des tâches de PRÉPARATION (couper, peser, mesurer, rincer, dégermer, sortir du frigo, préchauffer four, etc.)
+- PAS de tâches de cuisson (ne pas inclure "faire revenir", "cuire", "mijoter", "ajouter au feu"...)
+- Être PRÉCIS sur les quantités (ex: "Peser 100g de fromage râpé", pas juste "peser le fromage")
+- Être précis sur les techniques (ex: "Couper les oignons en petits dés", "Émincer l'ail très finement")
+- Utilise des emojis pertinents (🧅 oignon, 🧀 fromage, 🍅 tomate, 🔥 préchauffage four, ⏲️ sortir du frigo, 🧂 épices/sel, 🥕 carotte, 🧄 ail, 🌿 herbes, etc.)
+- Ordre logique (ce qui prend le plus de temps en premier, ex: préchauffer four = étape 1)
+- 3 à 10 tâches max (regrouper si nécessaire : "Couper oignons et ail en dés")
+
+════════════════════════════════════════
+MISSION 2 — DURÉES DES ÉTAPES DE CUISSON
+════════════════════════════════════════
+Pour CHAQUE étape de cuisson (dans l'ordre, 0-indexé), extrais la durée en MINUTES si l'étape en mentionne une.
+
+RÈGLES DURÉES :
+- Détecte : "3 minutes", "8 min", "1 heure", "1h", "1h30", "30 sec" (30 sec → 1 min minimum)
+- Pour une plage "8-10 min" → prends TOUJOURS le MINIMUM (= 8)
+- Pour "1h30" → convertis en minutes (= 90)
+- Pour "environ 5 min" ou "~5 min" → 5
+- Si aucune durée explicite dans l'étape → minutes: null
+- Si plusieurs durées dans une même étape (ex: "cuire 5 min puis reposer 10 min") → prends la PREMIÈRE (5)
+- Maximum 360 minutes (6h). Au-delà → null
+- step_index correspond à l'index (0-indexé) de l'étape dans la liste ci-dessus
+
+════════════════════════════════════════
+FORMAT DE RETOUR
+════════════════════════════════════════
+Réponds UNIQUEMENT en JSON strict, sans markdown, sans backticks, sans commentaire. Réponds en français.
+
+{
+  "tasks": [
+    { "id": 1, "description": "Préchauffer le four à 180°C", "emoji": "🔥" },
+    { "id": 2, "description": "Éplucher et couper 2 oignons en petits dés", "emoji": "🧅" }
+  ],
+  "step_durations": [
+    { "step_index": 0, "minutes": 3 },
+    { "step_index": 1, "minutes": null },
+    { "step_index": 2, "minutes": 8 },
+    { "step_index": 3, "minutes": 90 }
+  ]
+}
+
+Le tableau "step_durations" doit contenir UNE entrée par étape de cuisson (même si minutes=null).`;
+
+  const data = await geminiFetch({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.3,
+    },
+  });
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Une erreur est survenue. Réessayez.');
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new Error('Format de mise en place invalide.');
+  }
+  if (!parsed || !Array.isArray(parsed.tasks)) {
+    throw new Error('Format de mise en place invalide.');
+  }
+
+  const cleanTasks = parsed.tasks
+    .filter(
+      (t) =>
+        t &&
+        typeof t.description === 'string' &&
+        t.description.trim().length > 0
+    )
+    .map((t, i) => ({
+      id: i + 1,
+      description: String(t.description).trim().slice(0, 200),
+      emoji:
+        t.emoji && typeof t.emoji === 'string' && t.emoji.trim()
+          ? t.emoji.trim()
+          : '📝',
+    }));
+
+  if (cleanTasks.length === 0) {
+    throw new Error('Aucune tâche de mise en place générée.');
+  }
+
+  // Validation tolérante des durées : si absent → [], si invalide → minutes=null
+  const rawDurations = Array.isArray(parsed.step_durations)
+    ? parsed.step_durations
+    : [];
+  const cleanDurations = rawDurations
+    .filter(
+      (d) => d && typeof d === 'object' && typeof d.step_index === 'number'
+    )
+    .map((d) => {
+      let m = d.minutes;
+      if (typeof m === 'string') {
+        const n = parseFloat(m);
+        m = isNaN(n) ? null : n;
+      }
+      if (typeof m !== 'number' || !Number.isFinite(m) || m <= 0 || m > 360) {
+        m = null;
+      } else {
+        m = Math.round(m);
+      }
+      return { step_index: d.step_index, minutes: m };
+    });
+
+  return { tasks: cleanTasks, step_durations: cleanDurations };
 }

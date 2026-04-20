@@ -18,6 +18,7 @@ import { generateRecipeFromFridge } from '../lib/ai';
 import { AIQuotaExceededError, fetchAIQuota } from '../lib/aiQuota';
 import AIQuotaBadge from '../components/AIQuotaBadge';
 import QuotaWarningBanner from '../components/QuotaWarningBanner';
+import AddToPlanButton from '../components/AddToPlanButton';
 import { getCountryFlag } from '../lib/countryFlags';
 import { formatIngredient } from '../lib/formatIngredient';
 import { spacing, radius, maxContentWidth } from '../theme/theme';
@@ -303,6 +304,10 @@ export default function RecipeGenerationScreen() {
           </ScrollView>
 
           <View style={styles.stickyActions}>
+            <Text style={styles.aiDisclaimer}>
+              ⓘ Notre IA peut se tromper. Vérifie toujours les informations importantes.
+            </Text>
+            {recipe && user ? <AddToPlanButton recipe={recipe} /> : null}
             <Pressable
               onPress={onSave}
               disabled={saving}
@@ -557,5 +562,14 @@ const createStyles = (colors) =>
       color: colors.primary,
       fontSize: 14,
       fontWeight: '700',
+    },
+    aiDisclaimer: {
+      fontSize: 11,
+      fontStyle: 'italic',
+      color: colors.textSecondary,
+      textAlign: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 4,
+      lineHeight: 16,
     },
   });

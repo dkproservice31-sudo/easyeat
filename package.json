@@ -27,5 +27,10 @@
     "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "^0.21.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2",
+    "web-push": "^3.6.7"
+  }
 }

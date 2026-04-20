@@ -20,6 +20,12 @@ import { AIQuotaExceededError } from '../lib/aiQuota';
 import AIQuotaBadge from '../components/AIQuotaBadge';
 import { compressImage } from '../lib/imageCompression';
 import { getIngredientEmoji } from '../lib/ingredientEmoji';
+import ExpirationBadge from '../components/ExpirationBadge';
+import {
+  computeExpirationDate,
+  computeShelfLifeDays,
+  getExpirationLabel,
+} from '../lib/expirationStatus';
 import { spacing, maxContentWidth } from '../theme/theme';
 
 // Deux modes partagent 100% de la UI et du flow ; ne diffèrent que par
@@ -153,6 +159,61 @@ function ConfidenceBadge({ confidence }) {
   );
 }
 
+function DateEditor({ item, onUpdate, colors }) {
+  const todayISO = new Date().toISOString().split('T')[0];
+  const label = getExpirationLabel(item);
+
+  if (Platform.OS !== 'web') {
+    // Sur natif, on affiche juste le label (lecture) — édition PWA-first
+    return (
+      <View style={[styles.dateChip, { borderColor: colors.border }]}>
+        <Text style={[styles.dateChipText, { color: colors.textSecondary }]}>
+          📅 {label || 'date non dispo sur mobile'}
+        </Text>
+      </View>
+    );
+  }
+
+  const handleChange = (v) => {
+    if (!v) {
+      onUpdate({ expiration_date: null, shelf_life_days: null });
+      return;
+    }
+    onUpdate({
+      expiration_date: v,
+      shelf_life_days: computeShelfLifeDays(v),
+    });
+  };
+
+  return (
+    <View style={styles.dateEditorWrap}>
+      <Text style={[styles.dateChipText, { color: colors.textSecondary }]}>
+        📅
+      </Text>
+      <input
+        type="date"
+        value={item.expiration_date || ''}
+        onChange={(e) => handleChange(e.target.value || null)}
+        min={todayISO}
+        style={{
+          padding: 6,
+          borderRadius: 8,
+          border: `0.5px solid ${colors.border}`,
+          backgroundColor: 'transparent',
+          color: colors.text,
+          fontSize: 12,
+          outline: 'none',
+        }}
+      />
+      {label ? (
+        <Text style={[styles.dateChipText, { color: colors.textSecondary }]}>
+          ({label})
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function ReviewRow({ item, onUpdate, onDelete, colors }) {
   return (
     <View style={styles.row}>
@@ -173,6 +234,10 @@ function ReviewRow({ item, onUpdate, onDelete, colors }) {
           <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>✓</Text>
         ) : null}
       </Pressable>
+
+      <View style={styles.badgeWrap}>
+        <ExpirationBadge item={item} compact />
+      </View>
 
       <Text style={styles.rowEmoji}>{getIngredientEmoji(item.name)}</Text>
 
@@ -243,6 +308,8 @@ function ReviewRow({ item, onUpdate, onDelete, colors }) {
             })}
           </ScrollView>
         </View>
+
+        <DateEditor item={item} onUpdate={onUpdate} colors={colors} />
       </View>
 
       <Pressable
@@ -312,14 +379,22 @@ export default function ScanScreen() {
         setStatus('review');
         return;
       }
-      const enriched = detected.map((it) => ({
-        id: makeId(),
-        name: it.name,
-        quantity: normalizeQuantity(it.quantity),
-        unit: it.unit || 'unité',
-        confidence: it.confidence || 'medium',
-        checked: it.confidence !== 'low',
-      }));
+      const enriched = detected.map((it) => {
+        const shelfLifeDays =
+          typeof it.shelf_life_days === 'number' && it.shelf_life_days >= 0
+            ? it.shelf_life_days
+            : null;
+        return {
+          id: makeId(),
+          name: it.name,
+          quantity: normalizeQuantity(it.quantity),
+          unit: it.unit || 'unité',
+          confidence: it.confidence || 'medium',
+          checked: it.confidence !== 'low',
+          shelf_life_days: shelfLifeDays,
+          expiration_date: computeExpirationDate(shelfLifeDays),
+        };
+      });
       setItems(enriched);
       setStatus('review');
     } catch (err) {
@@ -370,6 +445,8 @@ export default function ScanScreen() {
         unit: 'unité',
         confidence: 'high',
         checked: true,
+        shelf_life_days: null,
+        expiration_date: null,
       },
     ]);
   };
@@ -388,6 +465,10 @@ export default function ScanScreen() {
         unit: i.unit || 'unité',
       };
       if (qty != null) payload.quantity = qty;
+      if (i.expiration_date) payload.expiration_date = i.expiration_date;
+      if (typeof i.shelf_life_days === 'number' && i.shelf_life_days >= 0) {
+        payload.shelf_life_days = i.shelf_life_days;
+      }
       return payload;
     });
     const { error } = await supabase.from('fridge_items').insert(payloads);
@@ -493,6 +574,8 @@ export default function ScanScreen() {
                     unit: 'unité',
                     confidence: 'high',
                     checked: true,
+                    shelf_life_days: null,
+                    expiration_date: null,
                   },
                 ]);
               }}
@@ -538,6 +621,12 @@ export default function ScanScreen() {
               </Pressable>
               <View style={{ height: 20 }} />
             </ScrollView>
+
+            <View style={themed.disclaimer}>
+              <Text style={themed.disclaimerText}>
+                ⓘ Les dates sont estimées par notre IA. Fie-toi à ton nez, tes yeux et ton goût avant de consommer.
+              </Text>
+            </View>
 
             <View style={themed.stickyActions}>
               <Pressable
@@ -681,6 +770,29 @@ const styles = StyleSheet.create({
     padding: 8,
     marginTop: 2,
   },
+  badgeWrap: {
+    width: 12,
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  dateEditorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  dateChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    alignSelf: 'flex-start',
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });
 
 const createThemedStyles = (colors) =>
@@ -805,6 +917,18 @@ const createThemedStyles = (colors) =>
       justifyContent: 'center',
     },
 
+    disclaimer: {
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+      backgroundColor: colors.background,
+    },
+    disclaimerText: {
+      fontSize: 11,
+      fontStyle: 'italic',
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 16,
+    },
     stickyActions: {
       paddingHorizontal: 16,
       paddingTop: 10,

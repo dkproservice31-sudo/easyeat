@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   Text,
   View,
+  Pressable,
   StyleSheet,
   Alert,
   Platform,
@@ -14,6 +15,7 @@ import ServingsSelector from '../components/ServingsSelector';
 import RecipePreview from '../components/RecipePreview';
 import AIQuotaBadge from '../components/AIQuotaBadge';
 import QuotaWarningBanner from '../components/QuotaWarningBanner';
+import InfoButton from '../components/InfoButton';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
@@ -27,6 +29,7 @@ function notify(title, message) {
 }
 
 export default function AIScreen() {
+  const navigation = useNavigation();
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -121,64 +124,105 @@ export default function AIScreen() {
         </View>
       </View>
 
-      <Text style={styles.label}>Nombre de personnes</Text>
-      <ServingsSelector
-        value={servings}
-        onChange={setServings}
-        disabled={generating}
-      />
+      <View style={styles.featureCard}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardEmoji}>🍳</Text>
+          <Text style={styles.cardTitle}>Générer une recette</Text>
+          <InfoButton
+            title="Générer une recette"
+            description="Génère une recette unique et instantanée basée sur ce que tu as dans ton frigo. Idéale quand tu veux cuisiner maintenant. L'IA te propose 1 recette optimisée pour utiliser tes ingrédients disponibles."
+          />
+        </View>
 
-      <View style={{ marginTop: spacing.lg }}>
-        <Text style={styles.label}>Ton envie</Text>
-        <Input
-          value={prompt}
-          onChangeText={setPrompt}
-          placeholder="Ex: un gâteau au chocolat moelleux, une recette italienne rapide, des tapas faciles..."
-          multiline
-          numberOfLines={3}
-          style={styles.multiline}
-          editable={!generating}
-          maxLength={200}
+        <Text style={styles.label}>Nombre de personnes</Text>
+        <ServingsSelector
+          value={servings}
+          onChange={setServings}
+          disabled={generating}
         />
+
+        <View style={{ marginTop: spacing.lg }}>
+          <Text style={styles.label}>Ton envie</Text>
+          <Input
+            value={prompt}
+            onChangeText={setPrompt}
+            placeholder="Ex: un gâteau au chocolat moelleux, une recette italienne rapide, des tapas faciles..."
+            multiline
+            numberOfLines={3}
+            style={styles.multiline}
+            editable={!generating}
+            maxLength={200}
+          />
+        </View>
+
+        <QuotaWarningBanner remaining={quotaRemaining} />
+
+        <View style={{ marginTop: spacing.lg }}>
+          <Button
+            title={
+              quotaExhausted
+                ? 'Quota atteint · Reviens demain'
+                : generating
+                ? 'Génération...'
+                : '✨ Générer avec l\'IA'
+            }
+            onPress={onGenerate}
+            loading={generating}
+            disabled={!canGenerate}
+          />
+        </View>
+
+        {recipe && (
+          <>
+            <RecipePreview recipe={recipe} />
+            <View style={{ marginTop: spacing.md }}>
+              <Button
+                title="💾 Enregistrer dans Mes Recettes"
+                onPress={onSave}
+                loading={saving}
+                disabled={generating}
+              />
+              <View style={{ height: spacing.sm }} />
+              <Button
+                title="🔄 Régénérer"
+                variant="ghost"
+                onPress={onGenerate}
+                disabled={generating || saving}
+              />
+            </View>
+          </>
+        )}
       </View>
 
-      <QuotaWarningBanner remaining={quotaRemaining} />
+      <Pressable
+        onPress={() => navigation.navigate('WeeklyMenu')}
+        style={({ pressed }) => [
+          styles.featureCard,
+          styles.featureCardCta,
+          pressed && { opacity: 0.85 },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Planifier ma semaine"
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardEmoji}>📅</Text>
+          <Text style={styles.cardTitle}>Planifier ma semaine</Text>
+          <InfoButton
+            title="Planifier ma semaine"
+            description="Génère un plan de repas pour les 7 prochains jours. L'IA priorise les ingrédients qui périment bientôt pour t'aider à moins gaspiller. Parfait pour préparer tes courses du dimanche et ne plus te demander 'qu'est-ce qu'on mange ce soir ?' tous les jours."
+          />
+        </View>
+        <View style={styles.cardCtaRow}>
+          <Text style={styles.cardDescription}>
+            7 recettes pour toute la semaine
+          </Text>
+          <Text style={styles.cardChevron}>›</Text>
+        </View>
+      </Pressable>
 
-      <View style={{ marginTop: spacing.lg }}>
-        <Button
-          title={
-            quotaExhausted
-              ? 'Quota atteint · Reviens demain'
-              : generating
-              ? 'Génération...'
-              : '✨ Générer avec l\'IA'
-          }
-          onPress={onGenerate}
-          loading={generating}
-          disabled={!canGenerate}
-        />
-      </View>
-
-      {recipe && (
-        <>
-          <RecipePreview recipe={recipe} />
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              title="💾 Enregistrer dans Mes Recettes"
-              onPress={onSave}
-              loading={saving}
-              disabled={generating}
-            />
-            <View style={{ height: spacing.sm }} />
-            <Button
-              title="🔄 Régénérer"
-              variant="ghost"
-              onPress={onGenerate}
-              disabled={generating || saving}
-            />
-          </View>
-        </>
-      )}
+      <Text style={styles.aiDisclaimer}>
+        ⓘ Notre IA peut se tromper. Vérifie toujours les informations importantes.
+      </Text>
     </Screen>
   );
 }
@@ -223,5 +267,56 @@ const createStyles = (colors) => StyleSheet.create({
     padding: 14,
     paddingTop: 14,
     fontSize: 16,
+  },
+  featureCard: {
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: spacing.md,
+  },
+  featureCardCta: {
+    borderColor: colors.primary,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: spacing.sm,
+  },
+  cardEmoji: {
+    fontSize: 22,
+  },
+  cardTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  cardCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cardDescription: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  cardChevron: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  aiDisclaimer: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginTop: spacing.lg,
   },
 });

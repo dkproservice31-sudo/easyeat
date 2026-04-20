@@ -24,6 +24,14 @@ import FadeInView from '../components/FadeInView';
 import { useTheme } from '../contexts/ThemeContext';
 import { radius, spacing, maxContentWidth } from '../theme/theme';
 import { getIngredientEmoji } from '../lib/ingredientEmoji';
+import ExpirationBadge from '../components/ExpirationBadge';
+import ExpirationAlertBanner from '../components/ExpirationAlertBanner';
+import {
+  getExpirationLabel,
+  getExpirationStatus,
+  getExpirationColor,
+  computeShelfLifeDays,
+} from '../lib/expirationStatus';
 
 const UNITS = ['g', 'kg', 'L', 'ml', 'unité'];
 
@@ -44,7 +52,7 @@ function confirmDialog(title, message) {
   });
 }
 
-function FridgeRowContent({ item, onChangeQty, styles, colors }) {
+function FridgeRowContent({ item, onChangeQty, onEdit, styles, colors }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.quantity != null ? String(item.quantity) : '');
 
@@ -67,14 +75,26 @@ function FridgeRowContent({ item, onChangeQty, styles, colors }) {
     if (n !== current) onChangeQty(item, n);
   };
 
+  const expirationLabel = getExpirationLabel(item);
+  const expirationColor =
+    getExpirationColor(getExpirationStatus(item)) || colors.textSecondary;
+
   return (
     <View style={styles.card}>
+      <ExpirationBadge item={item} compact />
       <Text style={styles.cardEmoji}>
         {getIngredientEmoji(item.name)}
       </Text>
-      <Text style={styles.cardName} numberOfLines={1}>
-        {item.name}
-      </Text>
+      <View style={styles.cardTextCol}>
+        <Text style={styles.cardName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        {expirationLabel ? (
+          <Text style={[styles.expirationLabel, { color: expirationColor }]}>
+            {expirationLabel}
+          </Text>
+        ) : null}
+      </View>
 
       <View style={styles.qtyWrap}>
         {editing ? (
@@ -117,6 +137,18 @@ function FridgeRowContent({ item, onChangeQty, styles, colors }) {
           <Text style={styles.unitText}>{item.unit}</Text>
         )}
       </View>
+
+      <Pressable
+        onPress={() => onEdit && onEdit(item)}
+        hitSlop={10}
+        style={({ pressed }) => [
+          styles.editBtn,
+          pressed && { opacity: 0.5 },
+        ]}
+        accessibilityLabel="Modifier cet ingrédient"
+      >
+        <Text style={styles.editIcon}>✏️</Text>
+      </Pressable>
     </View>
   );
 }
@@ -125,12 +157,14 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
   const [name, setName] = useState('');
   const [qty, setQty] = useState('');
   const [unit, setUnit] = useState('unité');
+  const [expirationDate, setExpirationDate] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
     setName('');
     setQty('');
     setUnit('unité');
+    setExpirationDate(null);
   };
 
   const submit = async () => {
@@ -144,13 +178,20 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
       }
     }
     setSaving(true);
-    const ok = await onAdd({ name: name.trim(), quantity, unit });
+    const ok = await onAdd({
+      name: name.trim(),
+      quantity,
+      unit,
+      expiration_date: expirationDate,
+    });
     setSaving(false);
     if (ok) {
       reset();
       onClose();
     }
   };
+
+  const todayISO = new Date().toISOString().split('T')[0];
 
   return (
     <Modal
@@ -220,6 +261,46 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
               })}
             </View>
 
+            <Text style={styles.fieldLabel}>Date de péremption (optionnel)</Text>
+            {Platform.OS === 'web' ? (
+              <View style={styles.dateRow}>
+                <input
+                  type="date"
+                  value={expirationDate || ''}
+                  onChange={(e) => setExpirationDate(e.target.value || null)}
+                  min={todayISO}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: `0.5px solid ${colors.border}`,
+                    backgroundColor: colors.surface,
+                    color: colors.text,
+                    fontSize: 15,
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                  }}
+                />
+                {expirationDate ? (
+                  <Pressable
+                    onPress={() => setExpirationDate(null)}
+                    style={({ pressed }) => [
+                      styles.dateClearBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    hitSlop={6}
+                    accessibilityLabel="Retirer la date"
+                  >
+                    <Text style={styles.dateClearText}>×</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={[styles.dateNativeHint, { color: colors.textSecondary }]}>
+                Bientôt disponible sur mobile natif
+              </Text>
+            )}
+
             <View style={styles.modalActions}>
               <Pressable
                 onPress={submit}
@@ -252,6 +333,205 @@ function AddItemModal({ visible, onClose, onAdd, styles, colors }) {
   );
 }
 
+function EditItemModal({ visible, item, onClose, onSave, onDelete, colors, styles }) {
+  const [name, setName] = useState('');
+  const [qty, setQty] = useState('');
+  const [unit, setUnit] = useState('unité');
+  const [expirationDate, setExpirationDate] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!item) return;
+    setName(item.name || '');
+    setQty(item.quantity == null ? '' : String(item.quantity));
+    setUnit(item.unit || 'unité');
+    setExpirationDate(item.expiration_date || null);
+    setSaving(false);
+  }, [item]);
+
+  if (!item) return null;
+
+  const todayISO = new Date().toISOString().split('T')[0];
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    let quantity = null;
+    if (qty.trim() !== '') {
+      const n = Number(qty.replace(',', '.'));
+      if (!isNaN(n) && n >= 0) quantity = n;
+    }
+    const shelf_life_days = expirationDate
+      ? computeShelfLifeDays(expirationDate)
+      : null;
+
+    setSaving(true);
+    await onSave(item.id, {
+      name: name.trim(),
+      quantity,
+      unit,
+      expiration_date: expirationDate,
+      shelf_life_days,
+    });
+    setSaving(false);
+    onClose();
+  };
+
+  const handleDelete = () => {
+    onClose();
+    onDelete(item);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalOverlay}
+      >
+        <Pressable style={styles.modalBackdropTap} onPress={onClose} />
+        <View style={styles.editModalContent}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.editModalTitle}>Modifier l'ingrédient</Text>
+
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Ex: Tomates"
+              placeholderTextColor={colors.textHint}
+              style={styles.modalInput}
+              maxLength={60}
+            />
+
+            <Text style={styles.fieldLabel}>Quantité (optionnel)</Text>
+            <TextInput
+              value={qty}
+              onChangeText={setQty}
+              placeholder="Optionnel"
+              placeholderTextColor={colors.textHint}
+              keyboardType="decimal-pad"
+              style={styles.modalInput}
+              maxLength={8}
+            />
+
+            <Text style={styles.fieldLabel}>Unité</Text>
+            <View style={styles.unitRow}>
+              {UNITS.map((u) => {
+                const active = unit === u;
+                return (
+                  <Pressable
+                    key={u}
+                    onPress={() => setUnit(u)}
+                    style={({ pressed }) => [
+                      styles.unitChip,
+                      active && styles.unitChipActive,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.unitChipText,
+                        active && styles.unitChipTextActive,
+                      ]}
+                    >
+                      {u}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.fieldLabel}>Date de péremption (optionnel)</Text>
+            {Platform.OS === 'web' ? (
+              <View style={styles.dateRow}>
+                <input
+                  type="date"
+                  value={expirationDate || ''}
+                  onChange={(e) => setExpirationDate(e.target.value || null)}
+                  min={todayISO}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: `0.5px solid ${colors.border}`,
+                    backgroundColor: colors.surface,
+                    color: colors.text,
+                    fontSize: 15,
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                  }}
+                />
+                {expirationDate ? (
+                  <Pressable
+                    onPress={() => setExpirationDate(null)}
+                    style={({ pressed }) => [
+                      styles.dateClearBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    hitSlop={6}
+                    accessibilityLabel="Retirer la date"
+                  >
+                    <Text style={styles.dateClearText}>×</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={[styles.dateNativeHint, { color: colors.textSecondary }]}>
+                Bientôt disponible sur mobile natif
+              </Text>
+            )}
+
+            <View style={styles.editModalActions}>
+              <Pressable
+                onPress={handleDelete}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.editModalBtnDanger,
+                  pressed && { opacity: 0.7 },
+                  saving && { opacity: 0.5 },
+                ]}
+              >
+                <Text style={styles.editModalBtnDangerText}>🗑  Supprimer</Text>
+              </Pressable>
+              <View style={{ flex: 1 }} />
+              <Pressable
+                onPress={onClose}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.editModalBtnSecondary,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.editModalBtnSecondaryText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving || !name.trim()}
+                style={({ pressed }) => [
+                  styles.editModalBtnPrimary,
+                  pressed && { opacity: 0.85 },
+                  (saving || !name.trim()) && { opacity: 0.5 },
+                ]}
+              >
+                <Text style={styles.editModalBtnPrimaryText}>
+                  {saving ? '...' : 'Enregistrer'}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function FridgeListScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -264,6 +544,7 @@ export default function FridgeListScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [openCardId, setOpenCardId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
   const scrollToId = route.params?.scrollToId;
@@ -274,6 +555,7 @@ export default function FridgeListScreen() {
       .from('fridge_items')
       .select('*')
       .eq('user_id', user.id)
+      .order('expiration_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
     if (!error) setItems(data ?? []);
   }, [user]);
@@ -294,11 +576,14 @@ export default function FridgeListScreen() {
     setRefreshing(false);
   };
 
-  const addItem = async ({ name, quantity, unit }) => {
+  const addItem = async ({ name, quantity, unit, expiration_date }) => {
     if (!user) return false;
     const payload = { user_id: user.id, name, unit };
     if (quantity !== null && quantity !== undefined) {
       payload.quantity = quantity;
+    }
+    if (expiration_date) {
+      payload.expiration_date = expiration_date;
     }
     const { data, error } = await supabase
       .from('fridge_items')
@@ -309,7 +594,9 @@ export default function FridgeListScreen() {
       notify('Ajout impossible', error.message);
       return false;
     }
-    setItems((prev) => [data, ...prev]);
+    // Ré-injecte en respectant le tri (expiration_date asc NULLS LAST,
+    // puis created_at desc). Plus simple : on délègue à `load()`.
+    await load();
     return true;
   };
 
@@ -340,6 +627,40 @@ export default function FridgeListScreen() {
       notify('Suppression impossible', error.message);
       setItems((prev) => [item, ...prev]);
     }
+  };
+
+  const openItemEditor = (item) => setEditingItem(item);
+  const closeItemEditor = () => setEditingItem(null);
+
+  const saveItem = async (itemId, updates) => {
+    if (!user) return;
+
+    const payload = {
+      name: updates.name,
+      unit: updates.unit,
+      quantity: updates.quantity,
+      expiration_date: updates.expiration_date,
+      shelf_life_days: updates.shelf_life_days,
+    };
+
+    // Optimistic update
+    setItems((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, ...payload } : it))
+    );
+
+    const { error } = await supabase
+      .from('fridge_items')
+      .update(payload)
+      .eq('id', itemId);
+
+    if (error) {
+      notify('Modification impossible', error.message);
+      await load();
+      return;
+    }
+
+    // Re-tri après modif (expiration_date peut avoir changé)
+    await load();
   };
 
   const deleteItem = (item) => {
@@ -454,7 +775,9 @@ export default function FridgeListScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <FlatList
+        <>
+          <ExpirationAlertBanner items={items} />
+          <FlatList
           ref={flatListRef}
           data={items}
           keyExtractor={(it) => it.id}
@@ -488,6 +811,7 @@ export default function FridgeListScreen() {
                 <FridgeRowContent
                   item={item}
                   onChangeQty={changeQty}
+                  onEdit={openItemEditor}
                   styles={styles}
                   colors={colors}
                 />
@@ -511,6 +835,7 @@ export default function FridgeListScreen() {
             </View>
           }
         />
+        </>
       )}
 
       <AddItemModal
@@ -519,6 +844,16 @@ export default function FridgeListScreen() {
         onAdd={addItem}
         styles={styles}
         colors={colors}
+      />
+
+      <EditItemModal
+        visible={!!editingItem}
+        item={editingItem}
+        onClose={closeItemEditor}
+        onSave={saveItem}
+        onDelete={deleteItem}
+        colors={colors}
+        styles={styles}
       />
 
       {pendingDelete && (
@@ -641,11 +976,32 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 22,
     marginRight: 4,
   },
-  cardName: {
+  cardTextCol: {
     flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  cardName: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+  },
+  expirationLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  editBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  editIcon: {
+    fontSize: 16,
   },
   qtyWrap: {
     flexDirection: 'row',
@@ -793,6 +1149,33 @@ const createStyles = (colors) => StyleSheet.create({
   },
   unitChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
   unitChipTextActive: { color: '#FFFFFF' },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateClearBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  dateClearText: {
+    fontSize: 20,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginTop: -2,
+  },
+  dateNativeHint: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    paddingVertical: 10,
+  },
   modalActions: {
     marginTop: 10,
     gap: 8,
@@ -817,6 +1200,75 @@ const createStyles = (colors) => StyleSheet.create({
   modalCancelText: {
     color: colors.primary,
     fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Edit item modal (bottom sheet)
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  editModalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    width: '100%',
+    maxWidth: maxContentWidth,
+    alignSelf: 'center',
+    maxHeight: '90%',
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  editModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  editModalBtnDanger: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E74C3C',
+  },
+  editModalBtnDangerText: {
+    color: '#E74C3C',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  editModalBtnSecondary: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  editModalBtnSecondaryText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  editModalBtnPrimary: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  editModalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
 

@@ -19,6 +19,7 @@ import StepsList from '../components/StepsList';
 import IngredientsList from '../components/IngredientsList';
 import RecipeEmoji from '../components/RecipeEmoji';
 import FadeInView from '../components/FadeInView';
+import AddToPlanButton from '../components/AddToPlanButton';
 import { formatDuration } from '../lib/formatDuration';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -976,6 +977,20 @@ export default function RecipeDetailScreen({ route, navigation }) {
 
       <View style={{ marginTop: spacing.xl }}>
         <Pressable
+          onPress={() => navigation.navigate('CookingMode', { recipe })}
+          style={({ pressed }) => [
+            styles.startCookingBtn,
+            pressed && { opacity: 0.85 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Commencer à cuisiner"
+        >
+          <Text style={styles.startCookingText}>
+            🔥 Commencer à cuisiner
+          </Text>
+        </Pressable>
+
+        <Pressable
           onPress={() =>
             navigation.navigate('ChefAssistant', { recipe })
           }
@@ -992,6 +1007,12 @@ export default function RecipeDetailScreen({ route, navigation }) {
           </Text>
         </Pressable>
       </View>
+
+      {user && recipe ? (
+        <View style={{ marginTop: spacing.md }}>
+          <AddToPlanButton recipe={recipe} />
+        </View>
+      ) : null}
 
       <RatingsSection
         recipe={recipe}
@@ -1176,6 +1197,25 @@ const createStyles = (colors) => StyleSheet.create({
   macrosCloseText: {
     fontSize: 13,
     color: colors.primary,
+    fontWeight: '700',
+  },
+
+  startCookingBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startCookingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '700',
   },
 

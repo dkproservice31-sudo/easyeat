@@ -7,6 +7,7 @@ import { Platform, StyleSheet } from 'react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import RootNavigator from './src/navigation/RootNavigator';
+import { registerServiceWorker } from './src/lib/pushNotifications';
 
 // Web : styles globaux qui réagissent au thème
 function useWebGlobalStyles() {
@@ -63,12 +64,6 @@ function useWebGlobalStyles() {
     }
     themeMeta.content = colors.primary;
 
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-      });
-    }
-
     // Styles globaux (recréés à chaque changement de thème)
     const EMOJI_FONTS =
       '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color","Android Emoji"';
@@ -102,6 +97,14 @@ function useWebGlobalStyles() {
 function AppInner() {
   useWebGlobalStyles();
   const { isDark } = useTheme();
+
+  useEffect(() => {
+    // Enregistrement silencieux du Service Worker au démarrage (PWA + push).
+    // Aucune permission notification demandée ici : c'est fait depuis le
+    // toggle dans ProfileScreen quand l'utilisateur l'active.
+    registerServiceWorker();
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>

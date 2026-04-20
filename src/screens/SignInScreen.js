@@ -3,6 +3,7 @@ import { Text, View, Alert, Platform, StyleSheet } from 'react-native';
 import Screen from '../components/Screen';
 import Input from '../components/Input';
 import Button from '../components/Button';
+import PWAInstallHint from '../components/PWAInstallHint';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing } from '../theme/theme';
@@ -46,6 +47,8 @@ export default function SignInScreen({ navigation }) {
           <Text style={styles.heroTitle}>EasyEat</Text>
           <Text style={styles.heroSubtitle}>Connectez-vous pour continuer</Text>
         </View>
+
+        <PWAInstallHint />
 
         <Input
           label="Email"

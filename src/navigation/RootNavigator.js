@@ -12,9 +12,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import HomeScreen from '../screens/HomeScreen';
 import RecipesScreen from '../screens/RecipesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import PlanningScreen from '../screens/PlanningScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import AddRecipeScreen from '../screens/AddRecipeScreen';
@@ -30,6 +30,8 @@ import RecipeGenerationScreen from '../screens/RecipeGenerationScreen';
 import ScanScreen from '../screens/ScanScreen';
 import ShoppingScreen from '../screens/ShoppingScreen';
 import AIScreen from '../screens/AIScreen';
+import WeeklyMenuScreen from '../screens/WeeklyMenuScreen';
+import CookingModeScreen from '../screens/CookingModeScreen';
 import AdminScreen from '../screens/AdminScreen';
 import AdminEditFeaturedScreen from '../screens/AdminEditFeaturedScreen';
 
@@ -41,12 +43,11 @@ const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
 const TAB_ICONS = {
-  Accueil: '🏠',
   Recettes: '📖',
   Frigo: '❄️',
   Courses: '🛒',
+  Planning: '📅',
   IA: '✨',
-  Profil: '👤',
 };
 
 const EMOJI_STYLE =
@@ -82,7 +83,18 @@ function CustomTabBar({ state, descriptors, navigation }) {
               canPreventDefault: true,
             });
             if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
+              // Pour les tabs avec Stack imbriqué, forcer le retour à
+              // l'initial route (sinon React Navigation préserve l'état
+              // du stack — ex: après un navigate('Frigo', { screen:
+              // 'FridgeList' }) via la cloche, on resterait bloqué sur
+              // FridgeList au lieu de revenir au frigo SVG).
+              if (route.name === 'Frigo') {
+                navigation.navigate('Frigo', { screen: 'FridgeHome' });
+              } else if (route.name === 'IA') {
+                navigation.navigate('IA', { screen: 'AIHome' });
+              } else {
+                navigation.navigate(route.name);
+              }
             }
           };
 
@@ -152,6 +164,7 @@ function AIStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AIHome" component={AIScreen} />
+      <Stack.Screen name="WeeklyMenu" component={WeeklyMenuScreen} />
     </Stack.Navigator>
   );
 }
@@ -162,12 +175,11 @@ function MainTabs() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
-      <Tabs.Screen name="Accueil" component={HomeScreen} />
       <Tabs.Screen name="Recettes" component={RecipesScreen} />
       <Tabs.Screen name="Frigo" component={FridgeStack} />
       <Tabs.Screen name="Courses" component={ShoppingScreen} />
+      <Tabs.Screen name="Planning" component={PlanningScreen} />
       <Tabs.Screen name="IA" component={AIStack} />
-      <Tabs.Screen name="Profil" component={ProfileScreen} />
     </Tabs.Navigator>
   );
 }
@@ -183,6 +195,15 @@ function AppStack() {
       }}
     >
       <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 250,
+        }}
+      />
       <Stack.Screen
         name="AddRecipe"
         component={AddRecipeScreen}
@@ -226,6 +247,16 @@ function AppStack() {
         name="ChefAssistant"
         component={ChefAssistantScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="CookingMode"
+        component={CookingModeScreen}
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          gestureEnabled: false,
+        }}
       />
       <Stack.Screen
         name="Help"
@@ -280,7 +311,7 @@ function PublicStack() {
         animationDuration: 250,
       }}
     >
-      <Stack.Screen name="PublicHome" component={HomeScreen} />
+      <Stack.Screen name="PublicHome" component={RecipesScreen} />
       <Stack.Screen
         name="RecipeDetail"
         component={RecipeDetailScreen}

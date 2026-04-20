@@ -14,12 +14,14 @@ import { supabase } from '../lib/supabase';
 import AnimatedFridge from '../components/AnimatedFridge';
 import ScanChoiceModal from '../components/ScanChoiceModal';
 import AIQuotaBadge from '../components/AIQuotaBadge';
+import ExpirationAlertBanner from '../components/ExpirationAlertBanner';
 import { spacing } from '../theme/theme';
 
 export default function FridgeHomeScreen({ navigation }) {
   const { user } = useAuth();
   const { colors } = useTheme();
   const [itemCount, setItemCount] = useState(0);
+  const [itemsWithDate, setItemsWithDate] = useState([]);
   const [scanModalOpen, setScanModalOpen] = useState(false);
 
   const loadCount = useCallback(async () => {
@@ -31,10 +33,21 @@ export default function FridgeHomeScreen({ navigation }) {
     setItemCount(count ?? 0);
   }, [user]);
 
+  const loadItemsWithDate = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('fridge_items')
+      .select('id, expiration_date, shelf_life_days')
+      .eq('user_id', user.id)
+      .not('expiration_date', 'is', null);
+    setItemsWithDate(data ?? []);
+  }, [user]);
+
   useFocusEffect(
     useCallback(() => {
       loadCount();
-    }, [loadCount])
+      loadItemsWithDate();
+    }, [loadCount, loadItemsWithDate])
   );
 
   const statusText = (() => {
@@ -94,6 +107,13 @@ export default function FridgeHomeScreen({ navigation }) {
               <AIQuotaBadge userId={user.id} usageType="user" compact />
             </View>
           ) : null}
+        </View>
+
+        <View style={{ paddingTop: 12 }}>
+          <ExpirationAlertBanner
+            items={itemsWithDate}
+            onPress={() => navigation.navigate('FridgeList')}
+          />
         </View>
 
         <View style={{ paddingVertical: 16, alignItems: 'center' }}>
